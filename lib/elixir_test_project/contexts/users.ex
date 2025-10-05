@@ -17,6 +17,13 @@ defmodule ElixirTestProject.Users do
     Repo.get_by(User, phone: phone)
   end
 
+  @doc """
+  Get a user by id. Returns nil if not found.
+  """
+  def get_user(id) do
+    Repo.get(User, id)
+  end
+
   def authenticate_user(phone, password) do
     case get_user_by_phone(phone) do
       nil ->

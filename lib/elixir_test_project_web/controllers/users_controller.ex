@@ -1,5 +1,6 @@
 defmodule ElixirTestProjectWeb.UsersController do
   use ElixirTestProjectWeb, :controller
+
   alias ElixirTestProject.Users
   alias ElixirTestProjectWeb.Auth.Token
 
@@ -19,9 +20,15 @@ defmodule ElixirTestProjectWeb.UsersController do
 
     case Users.register_user(attrs) do
       {:ok, user} ->
+        user_map =
+          user
+          |> Map.from_struct()
+          |> Map.drop([:__meta__, :password, :password_hash])
+          |> Map.put(:id, user.id)
+
         json(conn, %{
           message: "User registered successfully",
-          user: %{id: user.id, phone: user.phone, name: user.name}
+          user: user_map
         })
 
       {:error, changeset} ->
@@ -43,12 +50,27 @@ defmodule ElixirTestProjectWeb.UsersController do
         # Normalize and compare phone codes as strings to avoid type mismatches
         if to_string(user.phone_code) == to_string(phone_code) and
              Pbkdf2.verify_pass(password, user.password_hash) do
-          case Token.generate_and_sign(%{"user_id" => user.id}) do
+          # Use explicit signer so generation and verification use the same secret
+          signer = Token.signer()
+
+          user_map =
+            user
+            |> Map.from_struct()
+            |> Map.drop([:__meta__, :password, :password_hash])
+            |> Map.put(:id, user.id)
+
+          # Convert atom keys to string keys for JWT claims (Joken expects binary keys)
+          claims =
+            user_map
+            |> Enum.map(fn {k, v} -> {to_string(k), v} end)
+            |> Enum.into(%{})
+
+          case Token.generate_and_sign(claims, signer) do
             {:ok, jwt, _claims} ->
               json(conn, %{
                 message: "Login successful",
                 token: jwt,
-                user: %{id: user.id, phone: user.phone, name: user.name}
+                user: user_map
               })
 
             {:error, reason} ->
@@ -81,4 +103,177 @@ defmodule ElixirTestProjectWeb.UsersController do
       end)
     end)
   end
+
+  # GET /api/verify-token
+  # Only accepts Authorization header: Authorization: Bearer <token>
+  def verify_token(conn, _params) do
+    auth = get_req_header(conn, "authorization") |> List.first()
+
+    case extract_bearer(auth) do
+      {:ok, token} ->
+        token = String.trim(token)
+
+        # Try module-level verify first
+        case safe_verify_module(token) do
+          {:ok, claims} ->
+            json(conn, %{valid: true, claims: claims})
+
+          {:error, _} ->
+            # Fallback to explicit signer(s)
+            candidates =
+              [
+                System.get_env("JOKEN_SIGNING_SECRET"),
+                Application.get_env(:elixir_test_project, ElixirTestProjectWeb.Endpoint)[
+                  :secret_key_base
+                ]
+              ]
+              |> Enum.filter(&(&1 not in [nil, ""]))
+              |> Enum.uniq()
+              |> Enum.map(&Joken.Signer.create("HS256", &1))
+
+            case try_signers(token, candidates) do
+              {:ok, claims} ->
+                json(conn, %{valid: true, claims: claims})
+
+              {:error, %Joken.Error{} = err} ->
+                conn
+                |> put_status(:unauthorized)
+                |> json(%{valid: false, error: "invalid_token", reason: to_string(err)})
+
+              {:error, reason} ->
+                conn
+                |> put_status(:unauthorized)
+                |> json(%{valid: false, error: "invalid_token", reason: to_string(reason)})
+            end
+        end
+
+      {:error, :no_authorization} ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{valid: false, error: "missing_authorization_header"})
+
+      {:error, :invalid_format} ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{valid: false, error: "invalid_authorization_format"})
+    end
+  end
+
+  # GET /api/refresh-token
+  # Reads Authorization: Bearer <token>, validates it, fetches fresh user from DB and returns a new token
+  def refresh_token(conn, _params) do
+    auth = get_req_header(conn, "authorization") |> List.first()
+
+    case extract_bearer(auth) do
+      {:ok, token} ->
+        token = String.trim(token)
+
+        case safe_verify_module(token) do
+          {:ok, claims} ->
+            handle_refresh(conn, claims)
+
+          {:error, _} ->
+            candidates =
+              [
+                System.get_env("JOKEN_SIGNING_SECRET"),
+                Application.get_env(:elixir_test_project, ElixirTestProjectWeb.Endpoint)[
+                  :secret_key_base
+                ]
+              ]
+              |> Enum.filter(&(&1 not in [nil, ""]))
+              |> Enum.uniq()
+              |> Enum.map(&Joken.Signer.create("HS256", &1))
+
+            case try_signers(token, candidates) do
+              {:ok, claims} ->
+                handle_refresh(conn, claims)
+
+              {:error, _} ->
+                conn
+                |> put_status(:unauthorized)
+                |> json(%{valid: false, error: "invalid_token"})
+            end
+        end
+
+      {:error, :no_authorization} ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{valid: false, error: "missing_authorization_header"})
+
+      {:error, :invalid_format} ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{valid: false, error: "invalid_authorization_format"})
+    end
+  end
+
+  defp handle_refresh(conn, claims) when is_map(claims) do
+    # Accept several possible claim keys for user id
+    user_id =
+      Map.get(claims, "user_id") || Map.get(claims, :user_id) || Map.get(claims, "id") ||
+        Map.get(claims, :id) || Map.get(claims, "sub")
+
+    if is_nil(user_id) do
+      conn
+      |> put_status(:bad_request)
+      |> json(%{error: "missing_user_id_in_token"})
+    else
+      case Users.get_user(user_id) do
+        nil ->
+          conn
+          |> put_status(:not_found)
+          |> json(%{error: "user_not_found"})
+
+        user ->
+          user_map =
+            user
+            |> Map.from_struct()
+            |> Map.drop([:__meta__, :password, :password_hash])
+            |> Map.put(:id, user.id)
+
+          claims_for_token =
+            user_map
+            |> Enum.map(fn {k, v} -> {to_string(k), v} end)
+            |> Enum.into(%{})
+
+          signer = Token.signer()
+
+          case Token.generate_and_sign(claims_for_token, signer) do
+            {:ok, jwt, _} ->
+              json(conn, %{message: "Token refreshed", token: jwt, user: user_map})
+
+            {:error, reason} ->
+              conn
+              |> put_status(:internal_server_error)
+              |> json(%{error: "token_generation_failed", reason: to_string(reason)})
+          end
+      end
+    end
+  end
+
+  defp safe_verify_module(token) do
+    try do
+      Token.verify_and_validate(token)
+    rescue
+      e in _ -> {:error, e}
+    end
+  end
+
+  defp try_signers(_token, []), do: {:error, "no_signers_available"}
+
+  defp try_signers(token, [signer | rest]) do
+    case Token.verify_and_validate(token, signer) do
+      {:ok, claims} -> {:ok, claims}
+      {:error, _} -> try_signers(token, rest)
+    end
+  end
+
+  defp extract_bearer(nil), do: {:error, :no_authorization}
+  defp extract_bearer(""), do: {:error, :no_authorization}
+
+  defp extract_bearer("Bearer " <> token) when is_binary(token) and token != "" do
+    {:ok, token}
+  end
+
+  defp extract_bearer(_), do: {:error, :invalid_format}
 end

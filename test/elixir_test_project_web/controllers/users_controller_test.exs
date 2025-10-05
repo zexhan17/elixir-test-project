@@ -2,7 +2,7 @@ defmodule ElixirTestProjectWeb.UsersControllerTest do
   use ElixirTestProjectWeb.ConnCase, async: true
 
   alias ElixirTestProject.Users
-  alias ElixirTestProject.Repo
+  # alias ElixirTestProject.Repo
 
   @valid_attrs %{
     "name" => "Test User",
@@ -79,6 +79,57 @@ defmodule ElixirTestProjectWeb.UsersControllerTest do
     test "login missing params returns 400", %{conn: conn} do
       conn = post(conn, "/api/login", %{})
       assert json_response(conn, 400)["error"] == "missing_params"
+    end
+  end
+
+  describe "GET /api/verify-token and /api/refresh-token" do
+    setup do
+      attrs = %{
+        "name" => @valid_attrs["name"],
+        "phone" => @valid_attrs["phone"],
+        "phone_code" => @valid_attrs["phoneCode"],
+        "password" => @valid_attrs["password"]
+      }
+
+      {:ok, user} = Users.register_user(attrs)
+
+      login_payload = %{
+        "phoneCode" => @valid_attrs["phoneCode"],
+        "phone" => @valid_attrs["phone"],
+        "password" => @valid_attrs["password"]
+      }
+
+      # We use a conn built by ConnCase in tests
+      token_conn =
+        Phoenix.ConnTest.build_conn()
+        |> post("/api/login", login_payload)
+
+      resp = json_response(token_conn, 200)
+      token = resp["token"]
+
+      %{token: token, user: user}
+    end
+
+    test "verify-token returns claims and is valid", %{conn: conn, token: token} do
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer " <> token)
+        |> get("/api/verify-token")
+
+      assert json_response(conn, 200)["valid"] == true
+      assert json_response(conn, 200)["claims"]
+    end
+
+    test "refresh-token returns a new token and user", %{conn: conn, token: token, user: user} do
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer " <> token)
+        |> get("/api/refresh-token")
+
+      body = json_response(conn, 200)
+      assert body["message"] == "Token refreshed"
+      assert is_binary(body["token"]) and byte_size(body["token"]) > 0
+      assert body["user"]["phone"] == user.phone
     end
   end
 end

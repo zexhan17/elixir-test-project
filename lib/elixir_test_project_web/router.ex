@@ -11,6 +11,8 @@ defmodule ElixirTestProjectWeb.Router do
     # API routes
     post "/api/register", UsersController, :register
     post "/api/login", UsersController, :login
+    get "/api/verify-token", UsersController, :verify_token
+    get "/api/refresh-token", UsersController, :refresh_token
   end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development

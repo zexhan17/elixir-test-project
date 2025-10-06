@@ -65,7 +65,7 @@ defmodule ElixirTestProjectWeb.UsersController do
             |> Enum.map(fn {k, v} -> {to_string(k), v} end)
             |> Enum.into(%{})
 
-          case Token.generate_and_sign(claims, signer) do
+          case Token.generate_and_sign(add_exp(claims), signer) do
             {:ok, jwt, _claims} ->
               json(conn, %{
                 message: "Login successful",
@@ -238,7 +238,7 @@ defmodule ElixirTestProjectWeb.UsersController do
 
           signer = Token.signer()
 
-          case Token.generate_and_sign(claims_for_token, signer) do
+          case Token.generate_and_sign(add_exp(claims_for_token), signer) do
             {:ok, jwt, _} ->
               json(conn, %{message: "Token refreshed", token: jwt, user: user_map})
 
@@ -265,6 +265,31 @@ defmodule ElixirTestProjectWeb.UsersController do
     case Token.verify_and_validate(token, signer) do
       {:ok, claims} -> {:ok, claims}
       {:error, _} -> try_signers(token, rest)
+    end
+  end
+
+  # Adds an "exp" claim (unix seconds) to the provided claims map using the
+  # JOKEN_EXPIRES_TIME_IN_DAYS environment variable. If the env var is missing
+  # or invalid, defaults to 1 day.
+  defp add_exp(claims) when is_map(claims) do
+    secs = expires_in_seconds()
+    exp = DateTime.utc_now() |> DateTime.add(secs, :second) |> DateTime.to_unix()
+    Map.put(claims, "exp", exp)
+  end
+
+  defp expires_in_seconds do
+    case System.get_env("JOKEN_EXPIRES_TIME_IN_DAYS") do
+      nil ->
+        24 * 60 * 60
+
+      "" ->
+        24 * 60 * 60
+
+      val ->
+        case Integer.parse(val) do
+          {days, _} when days > 0 -> days * 24 * 60 * 60
+          _ -> 24 * 60 * 60
+        end
     end
   end
 

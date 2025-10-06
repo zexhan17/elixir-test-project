@@ -3,16 +3,32 @@ defmodule ElixirTestProjectWeb.Router do
 
   pipeline :api do
     plug :accepts, ["json"]
+    # Configure CORS using runtime config (origins set from env in runtime.exs)
+    plug CORSPlug, origin: Application.compile_env(:elixir_test_project, :cors_origins, [])
+    plug ElixirTestProjectWeb.Plugs.AuthenticateUserPlug
   end
 
-  scope "/", ElixirTestProjectWeb do
+  pipeline :auth do
+    plug ElixirTestProjectWeb.Plugs.RequireAuthPlug
+  end
+
+  scope "/api", ElixirTestProjectWeb do
     pipe_through :api
+
     get "/", HealthController, :index
-    # API routes
-    post "/api/register", UsersController, :register
-    post "/api/login", UsersController, :login
-    get "/api/verify-token", UsersController, :verify_token
-    get "/api/refresh-token", UsersController, :refresh_token
+
+    # Health route remains at the top level
+
+    # Group auth routes under /api/auth
+    scope "/auth" do
+      post "/register", UsersController, :register
+      post "/login", UsersController, :login
+
+      # Protected routes
+      pipe_through :auth
+      get "/verify-token", UsersController, :verify_token
+      get "/refresh-token", UsersController, :refresh_token
+    end
   end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development

@@ -29,3 +29,4 @@ elixir_test_project-*.tar
 *.db
 *.db-*
 
+.env

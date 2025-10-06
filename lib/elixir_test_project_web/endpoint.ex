@@ -43,6 +43,9 @@ defmodule ElixirTestProjectWeb.Endpoint do
   plug Plug.RequestId
   plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]
 
+  # CORS handling via DynamicCorsPlug so options are resolved at runtime
+  plug ElixirTestProjectWeb.Plugs.DynamicCorsPlug
+
   plug Plug.Parsers,
     parsers: [:urlencoded, :multipart, :json],
     pass: ["*/*"],

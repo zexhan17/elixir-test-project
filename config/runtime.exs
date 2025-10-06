@@ -1,5 +1,36 @@
 import Config
 
+# Auto-load .env for local dev so environment variables (like `origins`) are
+# available when starting the server without having to `source .env` manually.
+# This runs only in the :dev environment and is intentionally conservative.
+if config_env() == :dev do
+  dot_env = Path.expand("../.env", __DIR__)
+
+  if File.exists?(dot_env) do
+    dot_env
+    |> File.stream!()
+    |> Stream.map(&String.trim/1)
+    |> Stream.reject(&(&1 == "" || String.starts_with?(&1, "#")))
+    |> Enum.each(fn line ->
+      case String.split(line, "=", parts: 2) do
+        [key, val] ->
+          val =
+            val
+            |> String.trim()
+            |> String.trim_leading("\"")
+            |> String.trim_trailing("\"")
+            |> String.trim_leading("'")
+            |> String.trim_trailing("'")
+
+          System.put_env(key, val)
+
+        _ ->
+          :ok
+      end
+    end)
+  end
+end
+
 # config/runtime.exs is executed for all environments, including
 # during releases. It is executed after compilation and before the
 # system starts, so it is typically used to load production configuration
@@ -111,3 +142,16 @@ if config_env() == :prod do
   #
   # See https://hexdocs.pm/swoosh/Swoosh.html#module-installation for details.
 end
+
+# Read allowed CORS origins from environment (commonly set via .env)
+origins = System.get_env("origins") || System.get_env("CORS_ORIGINS") || ""
+
+parsed_origins =
+  origins
+  |> String.trim()
+  |> case do
+    "" -> []
+    s -> String.split(s, ",", trim: true)
+  end
+
+config :elixir_test_project, :cors_origins, parsed_origins

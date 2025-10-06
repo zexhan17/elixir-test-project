@@ -19,7 +19,7 @@ defmodule ElixirTestProjectWeb.UsersControllerTest do
 
   describe "POST /api/register" do
     test "registers a user and returns success and user", %{conn: conn} do
-      conn = post(conn, "/api/register", @valid_attrs)
+      conn = post(conn, "/api/auth/register", @valid_attrs)
       assert json_response(conn, 200)["message"] == "User registered successfully"
       body = json_response(conn, 200)
       assert %{"user" => user_map} = body
@@ -30,7 +30,7 @@ defmodule ElixirTestProjectWeb.UsersControllerTest do
     end
 
     test "returns validation errors for bad input", %{conn: conn} do
-      conn = post(conn, "/api/register", @short_password)
+      conn = post(conn, "/api/auth/register", @short_password)
       assert json_response(conn, 400)["errors"]
     end
   end
@@ -57,7 +57,7 @@ defmodule ElixirTestProjectWeb.UsersControllerTest do
         "password" => @valid_attrs["password"]
       }
 
-      conn = post(conn, "/api/login", login_payload)
+      conn = post(conn, "/api/auth/login", login_payload)
       assert json_response(conn, 200)["message"] == "Login successful"
       body = json_response(conn, 200)
       assert %{"token" => token, "user" => user_map} = body
@@ -67,7 +67,7 @@ defmodule ElixirTestProjectWeb.UsersControllerTest do
 
     test "login with invalid credentials returns 401", %{conn: conn} do
       conn =
-        post(conn, "/api/login", %{
+        post(conn, "/api/auth/login", %{
           "phoneCode" => @valid_attrs["phoneCode"],
           "phone" => @valid_attrs["phone"],
           "password" => "wrong"
@@ -77,7 +77,7 @@ defmodule ElixirTestProjectWeb.UsersControllerTest do
     end
 
     test "login missing params returns 400", %{conn: conn} do
-      conn = post(conn, "/api/login", %{})
+      conn = post(conn, "/api/auth/login", %{})
       assert json_response(conn, 400)["error"] == "missing_params"
     end
   end
@@ -102,7 +102,7 @@ defmodule ElixirTestProjectWeb.UsersControllerTest do
       # We use a conn built by ConnCase in tests
       token_conn =
         Phoenix.ConnTest.build_conn()
-        |> post("/api/login", login_payload)
+        |> post("/api/auth/login", login_payload)
 
       resp = json_response(token_conn, 200)
       token = resp["token"]
@@ -114,7 +114,7 @@ defmodule ElixirTestProjectWeb.UsersControllerTest do
       conn =
         conn
         |> put_req_header("authorization", "Bearer " <> token)
-        |> get("/api/verify-token")
+        |> get("/api/auth/verify-token")
 
       assert json_response(conn, 200)["valid"] == true
       assert json_response(conn, 200)["claims"]
@@ -124,7 +124,7 @@ defmodule ElixirTestProjectWeb.UsersControllerTest do
       conn =
         conn
         |> put_req_header("authorization", "Bearer " <> token)
-        |> get("/api/refresh-token")
+        |> get("/api/auth/refresh-token")
 
       body = json_response(conn, 200)
       assert body["message"] == "Token refreshed"

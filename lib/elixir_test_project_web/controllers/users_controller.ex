@@ -4,7 +4,7 @@ defmodule ElixirTestProjectWeb.UsersController do
   alias ElixirTestProject.Users
   alias ElixirTestProjectWeb.Auth.Token
 
-  # POST /api/register
+  # POST /api/auth/register
   def register(conn, %{
         "name" => name,
         "phone" => phone,
@@ -38,7 +38,7 @@ defmodule ElixirTestProjectWeb.UsersController do
     end
   end
 
-  # POST /api/login
+  # POST /api/auth/login
   def login(conn, %{"phoneCode" => phone_code, "phone" => phone, "password" => password}) do
     case Users.get_user_by_phone(phone) do
       nil ->
@@ -104,7 +104,7 @@ defmodule ElixirTestProjectWeb.UsersController do
     end)
   end
 
-  # GET /api/verify-token
+  # GET /api/auth/verify-token
   # Only accepts Authorization header: Authorization: Bearer <token>
   def verify_token(conn, _params) do
     auth = get_req_header(conn, "authorization") |> List.first()
@@ -159,7 +159,7 @@ defmodule ElixirTestProjectWeb.UsersController do
     end
   end
 
-  # GET /api/refresh-token
+  # GET /api/auth/refresh-token
   # Reads Authorization: Bearer <token>, validates it, fetches fresh user from DB and returns a new token
   def refresh_token(conn, _params) do
     auth = get_req_header(conn, "authorization") |> List.first()

@@ -11,6 +11,7 @@ defmodule ElixirTestProject.Schemas.User do
     field :phone_code, :string
     field :password, :string, virtual: true
     field :password_hash, :string
+    field :is_seller, :boolean, default: false
 
     timestamps()
   end

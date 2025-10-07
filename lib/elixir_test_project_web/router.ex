@@ -27,6 +27,7 @@ defmodule ElixirTestProjectWeb.Router do
       # Protected routes
       pipe_through :auth
       get "/verify-token", UsersController, :verify_token
+      post "/logout", UsersController, :logout
       get "/refresh-token", UsersController, :refresh_token
     end
   end

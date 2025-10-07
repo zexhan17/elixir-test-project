@@ -25,7 +25,15 @@ defmodule ElixirTestProjectWeb.Plugs.AuthenticateUserPlug do
 
         case verify_token(token) do
           {:ok, claims} when is_map(claims) ->
-            assign(conn, :current_user, user_from_claims(claims))
+            # Normalize claims and check revocation via JTI
+            nclaims = Token.normalize_claims(claims)
+            jti = Map.get(nclaims, "jti")
+
+            if jti && ElixirTestProject.Users.jti_revoked?(jti) do
+              assign(conn, :current_user, nil)
+            else
+              assign(conn, :current_user, user_from_claims(nclaims))
+            end
 
           {:error, _} ->
             # Try explicit signer used during generation as a pragmatic fallback
@@ -43,7 +51,8 @@ defmodule ElixirTestProjectWeb.Plugs.AuthenticateUserPlug do
               signer ->
                 case Token.verify_and_validate(token, signer) do
                   {:ok, claims} when is_map(claims) ->
-                    assign(conn, :current_user, user_from_claims(claims))
+                    nclaims = Token.normalize_claims(claims)
+                    assign(conn, :current_user, user_from_claims(nclaims))
 
                   _ ->
                     assign(conn, :current_user, nil)
@@ -96,14 +105,9 @@ defmodule ElixirTestProjectWeb.Plugs.AuthenticateUserPlug do
   end
 
   defp user_from_claims(claims) when is_map(claims) do
-    user_id =
-      Map.get(claims, "user_id") || Map.get(claims, :user_id) || Map.get(claims, "id") ||
-        Map.get(claims, :id) || Map.get(claims, "sub")
-
-    if user_id do
-      Users.get_user(user_id)
-    else
-      nil
+    case Token.user_id_from_claims(claims) do
+      nil -> nil
+      user_id -> Users.get_user(user_id)
     end
   end
 

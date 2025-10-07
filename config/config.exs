@@ -44,6 +44,14 @@ config :phoenix, :json_library, Jason
 # environment variable or from the endpoint secret_key_base.
 config :joken, default_signer: "HS256"
 
+# Default application-level values for JWT expiration and revoked-token cleanup.
+# These are sensible defaults but can be overridden at runtime via environment
+# variables. Values documented here mirror the env var names used at runtime.
+config :elixir_test_project,
+  joken_expires_time_in_days: 1,
+  jti_revoked_ttl_days: 30,
+  jti_revoked_cleanup_interval_hours: 24
+
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"

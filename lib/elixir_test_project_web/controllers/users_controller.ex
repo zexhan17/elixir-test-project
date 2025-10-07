@@ -3,6 +3,7 @@ defmodule ElixirTestProjectWeb.UsersController do
 
   alias ElixirTestProject.Users
   alias ElixirTestProjectWeb.Auth.Token
+  require Logger
 
   # POST /api/auth/register
   def register(conn, %{
@@ -65,7 +66,7 @@ defmodule ElixirTestProjectWeb.UsersController do
             |> Enum.map(fn {k, v} -> {to_string(k), v} end)
             |> Enum.into(%{})
 
-          case Token.generate_and_sign(add_exp(claims), signer) do
+          case Token.generate_and_sign(Token.prepare_claims(claims), signer) do
             {:ok, jwt, _claims} ->
               json(conn, %{
                 message: "Login successful",
@@ -116,7 +117,17 @@ defmodule ElixirTestProjectWeb.UsersController do
         # Try module-level verify first
         case safe_verify_module(token) do
           {:ok, claims} ->
-            json(conn, %{valid: true, claims: claims})
+            nclaims = Token.normalize_claims(claims)
+
+            jti = Map.get(nclaims, "jti")
+
+            if jti && Users.jti_revoked?(jti) do
+              conn
+              |> put_status(:unauthorized)
+              |> json(%{valid: false, error: "token_revoked"})
+            else
+              json(conn, %{valid: true, claims: claims})
+            end
 
           {:error, _} ->
             # Fallback to explicit signer(s)
@@ -133,7 +144,17 @@ defmodule ElixirTestProjectWeb.UsersController do
 
             case try_signers(token, candidates) do
               {:ok, claims} ->
-                json(conn, %{valid: true, claims: claims})
+                nclaims = Token.normalize_claims(claims)
+
+                jti = Map.get(nclaims, "jti")
+
+                if jti && Users.jti_revoked?(jti) do
+                  conn
+                  |> put_status(:unauthorized)
+                  |> json(%{valid: false, error: "token_revoked"})
+                else
+                  json(conn, %{valid: true, claims: claims})
+                end
 
               {:error, %Joken.Error{} = err} ->
                 conn
@@ -170,7 +191,17 @@ defmodule ElixirTestProjectWeb.UsersController do
 
         case safe_verify_module(token) do
           {:ok, claims} ->
-            handle_refresh(conn, claims)
+            nclaims = Token.normalize_claims(claims)
+
+            jti = Map.get(nclaims, "jti")
+
+            if jti && Users.jti_revoked?(jti) do
+              conn
+              |> put_status(:unauthorized)
+              |> json(%{valid: false, error: "token_revoked"})
+            else
+              handle_refresh(conn, claims)
+            end
 
           {:error, _} ->
             candidates =
@@ -186,7 +217,17 @@ defmodule ElixirTestProjectWeb.UsersController do
 
             case try_signers(token, candidates) do
               {:ok, claims} ->
-                handle_refresh(conn, claims)
+                nclaims = Token.normalize_claims(claims)
+
+                jti = Map.get(nclaims, "jti")
+
+                if jti && Users.jti_revoked?(jti) do
+                  conn
+                  |> put_status(:unauthorized)
+                  |> json(%{valid: false, error: "token_revoked"})
+                else
+                  handle_refresh(conn, claims)
+                end
 
               {:error, _} ->
                 conn
@@ -238,7 +279,7 @@ defmodule ElixirTestProjectWeb.UsersController do
 
           signer = Token.signer()
 
-          case Token.generate_and_sign(add_exp(claims_for_token), signer) do
+          case Token.generate_and_sign(Token.prepare_claims(claims_for_token), signer) do
             {:ok, jwt, _} ->
               json(conn, %{message: "Token refreshed", token: jwt, user: user_map})
 
@@ -259,37 +300,99 @@ defmodule ElixirTestProjectWeb.UsersController do
     end
   end
 
+  # POST /api/auth/logout
+  # Expects Authorization: Bearer <token>. Revokes the token's JTI so it cannot be used again.
+  def logout(conn, _params) do
+    auth = get_req_header(conn, "authorization") |> List.first()
+
+    case extract_bearer(auth) do
+      {:ok, token} ->
+        token = String.trim(token)
+
+        case safe_verify_module(token) do
+          {:ok, claims} when is_map(claims) ->
+            jti = Map.get(claims, "jti") || Map.get(claims, :jti)
+            user_id = Map.get(claims, "user_id") || Map.get(claims, :user_id)
+
+            if is_nil(jti) do
+              conn
+              |> put_status(:bad_request)
+              |> json(%{error: "missing_jti_in_token"})
+            else
+              case Users.revoke_jti(jti, user_id) do
+                {:ok, _} ->
+                  json(conn, %{logout: true})
+
+                {:error, _} ->
+                  conn
+                  |> put_status(:internal_server_error)
+                  |> json(%{logout: false, error: "logout_failed"})
+              end
+            end
+
+          {:error, reason} ->
+            # Log verification failure for debugging (do not log token)
+            Logger.debug("logout: module verify failed: #{inspect(reason)}")
+            # Fallback to explicit signer(s) used elsewhere (same as verify/refresh)
+            candidates =
+              [
+                System.get_env("JOKEN_SIGNING_SECRET"),
+                Application.get_env(:elixir_test_project, ElixirTestProjectWeb.Endpoint)[
+                  :secret_key_base
+                ]
+              ]
+              |> Enum.filter(&(&1 not in [nil, ""]))
+              |> Enum.uniq()
+              |> Enum.map(&Joken.Signer.create("HS256", &1))
+
+            case try_signers(token, candidates) do
+              {:ok, claims} when is_map(claims) ->
+                jti = Map.get(claims, "jti") || Map.get(claims, :jti)
+                user_id = Map.get(claims, "user_id") || Map.get(claims, :user_id)
+
+                if is_nil(jti) do
+                  conn
+                  |> put_status(:bad_request)
+                  |> json(%{logout: false, error: "missing_jti_in_token"})
+                else
+                  case Users.revoke_jti(jti, user_id) do
+                    {:ok, _} ->
+                      json(conn, %{logout: true})
+
+                    {:error, _} ->
+                      conn
+                      |> put_status(:internal_server_error)
+                      |> json(%{logout: false, error: "logout_failed"})
+                  end
+                end
+
+              {:error, reason2} ->
+                Logger.debug("logout: signer fallback failed: #{inspect(reason2)}")
+
+                conn
+                |> put_status(:unauthorized)
+                |> json(%{logout: false, error: "invalid_token"})
+            end
+        end
+
+      {:error, :no_authorization} ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{error: "missing_authorization_header"})
+
+      {:error, :invalid_format} ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{error: "invalid_authorization_format"})
+    end
+  end
+
   defp try_signers(_token, []), do: {:error, "no_signers_available"}
 
   defp try_signers(token, [signer | rest]) do
     case Token.verify_and_validate(token, signer) do
       {:ok, claims} -> {:ok, claims}
       {:error, _} -> try_signers(token, rest)
-    end
-  end
-
-  # Adds an "exp" claim (unix seconds) to the provided claims map using the
-  # JOKEN_EXPIRES_TIME_IN_DAYS environment variable. If the env var is missing
-  # or invalid, defaults to 1 day.
-  defp add_exp(claims) when is_map(claims) do
-    secs = expires_in_seconds()
-    exp = DateTime.utc_now() |> DateTime.add(secs, :second) |> DateTime.to_unix()
-    Map.put(claims, "exp", exp)
-  end
-
-  defp expires_in_seconds do
-    case System.get_env("JOKEN_EXPIRES_TIME_IN_DAYS") do
-      nil ->
-        24 * 60 * 60
-
-      "" ->
-        24 * 60 * 60
-
-      val ->
-        case Integer.parse(val) do
-          {days, _} when days > 0 -> days * 24 * 60 * 60
-          _ -> 24 * 60 * 60
-        end
     end
   end
 

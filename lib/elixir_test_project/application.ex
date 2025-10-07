@@ -16,6 +16,7 @@ defmodule ElixirTestProject.Application do
        query: Application.get_env(:elixir_test_project, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: ElixirTestProject.PubSub},
       ElixirTestProjectWeb.Presence,
+      ElixirTestProject.RevokedTokenCleaner,
       # Start a worker by calling: ElixirTestProject.Worker.start_link(arg)
       # {ElixirTestProject.Worker, arg},
       # Start to serve requests, typically the last entry

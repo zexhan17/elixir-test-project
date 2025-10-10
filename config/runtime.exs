@@ -1,157 +1,88 @@
 import Config
+import Dotenvy
 
-# Auto-load .env for local dev so environment variables (like `origins`) are
-# available when starting the server without having to `source .env` manually.
-# This runs only in the :dev environment and is intentionally conservative.
-if config_env() == :dev do
-  dot_env = Path.expand("../.env", __DIR__)
+# -----------------------------------------------------------------------------
+# Load .env files using Dotenvy
+# -----------------------------------------------------------------------------
+env_dir_prefix = System.get_env("RELEASE_ROOT") || Path.expand("./")
 
-  if File.exists?(dot_env) do
-    dot_env
-    |> File.stream!()
-    |> Stream.map(&String.trim/1)
-    |> Stream.reject(&(&1 == "" || String.starts_with?(&1, "#")))
-    |> Enum.each(fn line ->
-      case String.split(line, "=", parts: 2) do
-        [key, val] ->
-          val =
-            val
-            |> String.trim()
-            |> String.trim_leading("\"")
-            |> String.trim_trailing("\"")
-            |> String.trim_leading("'")
-            |> String.trim_trailing("'")
+source!([
+  Path.absname(".env", env_dir_prefix),
+  Path.absname(".#{config_env()}.env", env_dir_prefix),
+  System.get_env()
+])
 
-          System.put_env(key, val)
+# -----------------------------------------------------------------------------
+# Common values
+# -----------------------------------------------------------------------------
+config :elixir_test_project,
+  env: config_env(),
+  release_name: env!("RELEASE_NAME", :string, "dev")
 
-        _ ->
-          :ok
-      end
-    end)
-  end
-end
+# -----------------------------------------------------------------------------
+# Phoenix Endpoint
+# -----------------------------------------------------------------------------
+config :elixir_test_project, ElixirTestProjectWeb.Endpoint,
+  http: [port: env!("PORT", :integer, 4000)],
+  secret_key_base: env!("SECRET_KEY_BASE", :string!),
+  url: [
+    host: env!("PHX_HOST", :string, "localhost"),
+    port: env!("PORT", :integer, 4000)
+  ],
+  server: env!("PHX_SERVER", :string, "false") == "true"
 
-# config/runtime.exs is executed for all environments, including
-# during releases. It is executed after compilation and before the
-# system starts, so it is typically used to load production configuration
-# and secrets from environment variables or elsewhere. Do not define
-# any compile-time configuration in here, as it won't be applied.
-# The block below contains prod specific runtime configuration.
+# -----------------------------------------------------------------------------
+# Database configuration
+# -----------------------------------------------------------------------------
+config :elixir_test_project, ElixirTestProject.Repo,
+  database:
+    env!("DATABASE_PATH", :string, "./elixir_test_project_dev.db")
+    |> Path.expand(),
+  pool_size: env!("POOL_SIZE", :integer, 5),
+  adapter: Ecto.Adapters.SQLite3
 
-# ## Using releases
-#
-# If you use `mix release`, you need to explicitly enable the server
-# by passing the PHX_SERVER=true when you start it:
-#
-#     PHX_SERVER=true bin/elixir_test_project start
-#
-# Alternatively, you can use `mix phx.gen.release` to generate a `bin/server`
-# script that automatically sets the env var above.
-if System.get_env("PHX_SERVER") do
-  config :elixir_test_project, ElixirTestProjectWeb.Endpoint, server: true
-end
+# -----------------------------------------------------------------------------
+# JWT configuration
+# -----------------------------------------------------------------------------
+config :elixir_test_project, :jwt,
+  secret: env!("JOKEN_SIGNING_SECRET", :string),
+  expires_in_days: env!("JOKEN_EXPIRES_TIME_IN_DAYS", :integer, 2)
 
-if config_env() == :prod do
-  database_path =
-    System.get_env("DATABASE_PATH") ||
-      raise """
-      environment variable DATABASE_PATH is missing.
-      For example: /etc/elixir_test_project/elixir_test_project.db
-      """
+# -----------------------------------------------------------------------------
+# Google OAuth configuration
+# -----------------------------------------------------------------------------
+config :elixir_test_project, :google_oauth,
+  client_id: env!("GOOGLE_CLIENT_ID", :string!),
+  client_secret: env!("GOOGLE_CLIENT_SECRET", :string!),
+  callback_url: env!("GOOGLE_CALLBACK_URL", :string!)
 
-  config :elixir_test_project, ElixirTestProject.Repo,
-    database: database_path,
-    pool_size: String.to_integer(System.get_env("POOL_SIZE") || "5")
+# -----------------------------------------------------------------------------
+# CORS configuration
+# -----------------------------------------------------------------------------
+config :cors_plug,
+  origin:
+    env!("origins", :string, "http://localhost:5173,http://localhost:5174")
+    |> String.split(",", trim: true)
 
-  # The secret key base is used to sign/encrypt cookies and other secrets.
-  # A default value is used in config/dev.exs and config/test.exs but you
-  # want to use a different value for prod and you most likely don't want
-  # to check this value into version control, so we use an environment
-  # variable instead.
-  secret_key_base =
-    System.get_env("SECRET_KEY_BASE") ||
-      raise """
-      environment variable SECRET_KEY_BASE is missing.
-      You can generate one by calling: mix phx.gen.secret
-      """
+# -----------------------------------------------------------------------------
+# Optional DNS cluster (for distributed release setups)
+# -----------------------------------------------------------------------------
+# if dns_query = env!("DNS_CLUSTER_QUERY", :string, nil) do
+#   config :libcluster,
+#     topologies: [
+#       dns_cluster: [
+#         strategy: Elixir.Cluster.Strategy.DNSPoll,
+#         config: [query: dns_query]
+#       ]
+#     ]
+# end
 
-  host = System.get_env("PHX_HOST") || "example.com"
-  port = String.to_integer(System.get_env("PORT") || "4000")
-
-  config :elixir_test_project, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
-
-  config :elixir_test_project, ElixirTestProjectWeb.Endpoint,
-    url: [host: host, port: 443, scheme: "https"],
-    http: [
-      # Enable IPv6 and bind on all interfaces.
-      # Set it to  {0, 0, 0, 0, 0, 0, 0, 1} for local network only access.
-      # See the documentation on https://hexdocs.pm/bandit/Bandit.html#t:options/0
-      # for details about using IPv6 vs IPv4 and loopback vs public addresses.
-      ip: {0, 0, 0, 0, 0, 0, 0, 0},
-      port: port
-    ],
-    secret_key_base: secret_key_base
-
-  # ## SSL Support
-  #
-  # To get SSL working, you will need to add the `https` key
-  # to your endpoint configuration:
-  #
-  #     config :elixir_test_project, ElixirTestProjectWeb.Endpoint,
-  #       https: [
-  #         ...,
-  #         port: 443,
-  #         cipher_suite: :strong,
-  #         keyfile: System.get_env("SOME_APP_SSL_KEY_PATH"),
-  #         certfile: System.get_env("SOME_APP_SSL_CERT_PATH")
-  #       ]
-  #
-  # The `cipher_suite` is set to `:strong` to support only the
-  # latest and more secure SSL ciphers. This means old browsers
-  # and clients may not be supported. You can set it to
-  # `:compatible` for wider support.
-  #
-  # `:keyfile` and `:certfile` expect an absolute path to the key
-  # and cert in disk or a relative path inside priv, for example
-  # "priv/ssl/server.key". For all supported SSL configuration
-  # options, see https://hexdocs.pm/plug/Plug.SSL.html#configure/1
-  #
-  # We also recommend setting `force_ssl` in your config/prod.exs,
-  # ensuring no data is ever sent via http, always redirecting to https:
-  #
-  #     config :elixir_test_project, ElixirTestProjectWeb.Endpoint,
-  #       force_ssl: [hsts: true]
-  #
-  # Check `Plug.SSL` for all available options in `force_ssl`.
-
-  # ## Configuring the mailer
-  #
-  # In production you need to configure the mailer to use a different adapter.
-  # Here is an example configuration for Mailgun:
-  #
-  #     config :elixir_test_project, ElixirTestProject.Mailer,
-  #       adapter: Swoosh.Adapters.Mailgun,
-  #       api_key: System.get_env("MAILGUN_API_KEY"),
-  #       domain: System.get_env("MAILGUN_DOMAIN")
-  #
-  # Most non-SMTP adapters require an API client. Swoosh supports Req, Hackney,
-  # and Finch out-of-the-box. This configuration is typically done at
-  # compile-time in your config/prod.exs:
-  #
-  #     config :swoosh, :api_client, Swoosh.ApiClient.Req
-  #
-  # See https://hexdocs.pm/swoosh/Swoosh.html#module-installation for details.
-end
-
-# Read allowed CORS origins from environment (commonly set via .env)
-origins = System.get_env("origins") || System.get_env("CORS_ORIGINS") || ""
-
-parsed_origins =
-  origins
-  |> String.trim()
-  |> case do
-    "" -> []
-    s -> String.split(s, ",", trim: true)
-  end
-
-config :elixir_test_project, :cors_origins, parsed_origins
+# -----------------------------------------------------------------------------
+# Print helpful info at startup
+# -----------------------------------------------------------------------------
+IO.puts("""
+Loaded runtime config:
+  ENV: #{config_env()}
+  PORT: #{env!("PORT", :string, "4000")}
+  DATABASE_PATH: #{Path.expand(env!("DATABASE_PATH", :string, "./elixir_test_project_dev.db"))}
+""")

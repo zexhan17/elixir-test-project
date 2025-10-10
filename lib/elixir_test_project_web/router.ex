@@ -21,14 +21,18 @@ defmodule ElixirTestProjectWeb.Router do
 
     # Group auth routes under /api/auth
     scope "/auth" do
-      post "/register", UsersController, :register
-      post "/login", UsersController, :login
+      post "/register", AuthController, :register
+      post "/login", AuthController, :login
 
       # Protected routes
       pipe_through :auth
-      get "/verify-token", UsersController, :verify_token
-      post "/logout", UsersController, :logout
-      get "/refresh-token", UsersController, :refresh_token
+      get "/verify-token", AuthController, :verify_token
+      post "/logout", AuthController, :logout
+      get "/refresh-token", AuthController, :refresh_token
+    end
+
+    scope "/user" do
+      get "/get-google-redirect-link", UsersController, :get_google_redirect_link
     end
   end
 

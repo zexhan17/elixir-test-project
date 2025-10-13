@@ -3,8 +3,7 @@ defmodule ElixirTestProjectWeb.Router do
 
   pipeline :api do
     plug :accepts, ["json"]
-    # Configure CORS using runtime config (origins set from env in runtime.exs)
-    plug CORSPlug, origin: Application.compile_env(:elixir_test_project, :cors_origins, [])
+    plug ElixirTestProjectWeb.Plugs.DynamicCorsPlug
     plug ElixirTestProjectWeb.Plugs.AuthenticateUserPlug
   end
 
@@ -17,9 +16,7 @@ defmodule ElixirTestProjectWeb.Router do
 
     get "/", HealthController, :index
 
-    # Health route remains at the top level
-
-    # Group auth routes under /api/auth
+    # Auth routes
     scope "/auth" do
       post "/register", AuthController, :register
       post "/login", AuthController, :login
@@ -38,11 +35,6 @@ defmodule ElixirTestProjectWeb.Router do
 
   # Enable LiveDashboard and Swoosh mailbox preview in development
   if Application.compile_env(:elixir_test_project, :dev_routes) do
-    # If you want to use the LiveDashboard in production, you should put
-    # it behind authentication and allow only admins to access it.
-    # If your application does not have an admins-only section yet,
-    # you can use Plug.BasicAuth to set up some basic authentication
-    # as long as you are also using SSL (which you should anyway).
     import Phoenix.LiveDashboard.Router
 
     scope "/dev" do

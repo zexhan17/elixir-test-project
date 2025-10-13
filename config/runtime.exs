@@ -59,10 +59,14 @@ config :elixir_test_project, :google_oauth,
 # -----------------------------------------------------------------------------
 # CORS configuration
 # -----------------------------------------------------------------------------
-config :cors_plug,
-  origin:
-    env!("origins", :string, "http://localhost:5173,http://localhost:5174")
-    |> String.split(",", trim: true)
+allowed_origins =
+  env!("origins", :string, "http://localhost:5173,http://localhost:5174")
+  |> String.split(",", trim: true)
+
+config :cors_plug, origin: allowed_origins
+
+# make them available to DynamicCorsPlug
+config :elixir_test_project, :cors_origins, allowed_origins
 
 # -----------------------------------------------------------------------------
 # Optional DNS cluster (for distributed release setups)
@@ -85,4 +89,5 @@ Loaded runtime config:
   ENV: #{config_env()}
   PORT: #{env!("PORT", :string, "4000")}
   DATABASE_PATH: #{Path.expand(env!("DATABASE_PATH", :string, "./elixir_test_project_dev.db"))}
+  ALLOWED_ORIGINS: #{inspect(allowed_origins)}
 """)

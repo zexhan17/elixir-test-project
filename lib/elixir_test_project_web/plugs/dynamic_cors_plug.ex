@@ -1,12 +1,10 @@
 defmodule ElixirTestProjectWeb.Plugs.DynamicCorsPlug do
   @moduledoc """
   Runtime wrapper around CORSPlug that resolves options from application env
-  on each request. This ensures values set in `runtime.exs` (via
-  `Application.put_env/3` at runtime) are applied for preflight and responses.
+  on each request. Ensures values set in `runtime.exs` are applied dynamically.
   """
   @behaviour Plug
 
-  # no direct conn helpers required here; CORSPlug will handle the connection
   @default_headers [
     "authorization",
     "content-type",
@@ -20,7 +18,14 @@ defmodule ElixirTestProjectWeb.Plugs.DynamicCorsPlug do
 
   def init(_opts), do: %{}
 
-  def call(conn, _opts) do
+  def call(%Plug.Conn{method: "OPTIONS"} = conn, _opts) do
+    # Always allow OPTIONS preflight without auth blocking
+    apply_cors(conn)
+  end
+
+  def call(conn, _opts), do: apply_cors(conn)
+
+  defp apply_cors(conn) do
     cors_opts = [
       origin: Application.get_env(:elixir_test_project, :cors_origins, []),
       methods: @default_methods,
@@ -29,7 +34,6 @@ defmodule ElixirTestProjectWeb.Plugs.DynamicCorsPlug do
       max_age: Application.get_env(:elixir_test_project, :cors_max_age, 86_400)
     ]
 
-    # initialize CORSPlug with resolved opts and call it
     conn
     |> CORSPlug.call(CORSPlug.init(cors_opts))
   end

@@ -110,6 +110,4 @@ defmodule ElixirTestProjectWeb.Plugs.AuthenticateUserPlug do
       user_id -> Users.get_user(user_id)
     end
   end
-
-  defp user_from_claims(_), do: nil
 end

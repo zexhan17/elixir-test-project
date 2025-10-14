@@ -21,7 +21,6 @@ defmodule ElixirTestProjectWeb.Router do
       post "/register", AuthController, :register
       post "/login", AuthController, :login
 
-      # Protected routes
       pipe_through :auth
       get "/verify-token", AuthController, :verify_token
       post "/logout", AuthController, :logout
@@ -30,7 +29,13 @@ defmodule ElixirTestProjectWeb.Router do
 
     scope "/user" do
       get "/get-google-redirect-link", UsersController, :get_google_redirect_link
+      get "/connect-google", UsersController, :connect_google
+      get "/is-connected", UsersController, :is_google_connected
+      post "/upload-image", UsersController, :upload_to_google
     end
+
+    # ✅ Catch-all for unmatched /api routes
+    match :*, "/*path", ErrorController, :not_found
   end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development

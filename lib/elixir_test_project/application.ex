@@ -21,7 +21,8 @@ defmodule ElixirTestProject.Application do
       # Start a worker by calling: ElixirTestProject.Worker.start_link(arg)
       # {ElixirTestProject.Worker, arg},
       # Start to serve requests, typically the last entry
-      ElixirTestProjectWeb.Endpoint
+      ElixirTestProjectWeb.Endpoint,
+      {Finch, name: ElixirTestProject.Finch}
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html

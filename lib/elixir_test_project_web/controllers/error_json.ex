@@ -1,21 +1,15 @@
 defmodule ElixirTestProjectWeb.ErrorJSON do
   @moduledoc """
-  This module is invoked by your endpoint in case of errors on JSON requests.
-
-  See config/config.exs.
+  Consistent JSON errors for crashes, missing routes, or unhandled exceptions.
   """
 
-  # If you want to customize a particular status code,
-  # you may add your own clauses, such as:
-  #
-  # def render("500.json", _assigns) do
-  #   %{errors: %{detail: "Internal Server Error"}}
-  # end
+  def render("404.json", _assigns), do: %{error: "not_found"}
+  def render("500.json", _assigns), do: %{error: "internal_server_error"}
+  def render("403.json", _assigns), do: %{error: "forbidden"}
+  def render("401.json", _assigns), do: %{error: "unauthorized"}
 
-  # By default, Phoenix returns the status message from
-  # the template name. For example, "404.json" becomes
-  # "Not Found".
+  # Default fallback
   def render(template, _assigns) do
-    %{errors: %{detail: Phoenix.Controller.status_message_from_template(template)}}
+    %{error: Phoenix.Controller.status_message_from_template(template)}
   end
 end

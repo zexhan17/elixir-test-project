@@ -1,6 +1,6 @@
 defmodule ElixirTestProjectWeb.AuthController do
   use ElixirTestProjectWeb, :controller
-
+  action_fallback ElixirTestProjectWeb.FallbackController
   alias ElixirTestProject.Users
   alias ElixirTestProjectWeb.Auth.Token
   require Logger

@@ -44,8 +44,8 @@ defmodule ElixirTestProjectWeb.AuthController do
     case Users.get_user_by_phone(phone) do
       nil ->
         conn
-        |> put_status(:unauthorized)
-        |> json(%{error: "Invalid phone or password"})
+        |> put_status(:not_found)
+        |> json("Phone not registered!")
 
       user ->
         # Normalize and compare phone codes as strings to avoid type mismatches

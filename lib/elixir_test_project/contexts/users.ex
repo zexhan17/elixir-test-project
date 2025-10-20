@@ -9,6 +9,7 @@ defmodule ElixirTestProject.Users do
 
   import Ecto.Query, warn: false
   alias ElixirTestProject.Repo
+  alias ElixirTestProjectWeb.Presence
   alias ElixirTestProject.Schemas.User
   alias ElixirTestProject.Schemas.RevokedToken
 
@@ -63,6 +64,47 @@ defmodule ElixirTestProject.Users do
       {:ok, rt} -> {:ok, rt}
       {:error, cs} -> {:error, cs}
       other -> other
+    end
+  end
+
+  # Marks a user online/offline in DB (simple boolean + timestamp pattern)
+  def mark_user_online(user_id, is_online) when is_integer(user_id) or is_binary(user_id) do
+    user_id = user_id
+    user = get_user(user_id)
+
+    if user do
+      changeset =
+        User.changeset(user, %{
+          online: is_online,
+          last_online_at: if(is_online, do: nil, else: DateTime.utc_now())
+        })
+
+      Repo.update(changeset)
+    else
+      {:error, :not_found}
+    end
+  end
+
+  # Called on terminate — will check Presence for remaining presences and mark offline only if none remain.
+  def maybe_mark_user_offline_after_disconnect(user_id) do
+    topic = "user_presence:global"
+
+    presences = Presence.list(topic)
+
+    # presences is map keyed by presence key: e.g. "user:123" => %{metas: [...]}
+    key = "user:#{user_id}"
+
+    case Map.get(presences, key) do
+      nil ->
+        # no remaining presence entries for this user -> mark offline
+        mark_user_online(user_id, false)
+
+      %{metas: metas} when is_list(metas) and length(metas) == 0 ->
+        mark_user_online(user_id, false)
+
+      _ ->
+        # still present on another socket/tab — keep online
+        {:ok, :still_present}
     end
   end
 

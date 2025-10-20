@@ -13,7 +13,9 @@ defmodule ElixirTestProjectWeb.Endpoint do
     longpoll: [connect_info: [session: @session_options]]
 
   # Add user socket for tracking presence
-  socket "/socket", ElixirTestProjectWeb.UserSocket
+  socket "/socket", ElixirTestProjectWeb.UserSocket,
+    websocket: true,
+    longpoll: false
 
   # Serve static files
   plug Plug.Static,

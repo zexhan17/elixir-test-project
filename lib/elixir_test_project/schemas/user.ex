@@ -12,6 +12,8 @@ defmodule ElixirTestProject.Schemas.User do
     field :password, :string, virtual: true
     field :password_hash, :string
     field :is_seller, :boolean, default: false
+    field :online, :boolean, default: false
+    field :last_online_at, :utc_datetime
 
     timestamps()
   end

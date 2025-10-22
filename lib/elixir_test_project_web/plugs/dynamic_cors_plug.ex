@@ -16,6 +16,8 @@ defmodule ElixirTestProjectWeb.Plugs.DynamicCorsPlug do
 
   @default_methods ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
 
+  alias ElixirTestProject.Config
+
   def init(_opts), do: %{}
 
   def call(%Plug.Conn{method: "OPTIONS"} = conn, _opts) do
@@ -27,11 +29,11 @@ defmodule ElixirTestProjectWeb.Plugs.DynamicCorsPlug do
 
   defp apply_cors(conn) do
     cors_opts = [
-      origin: Application.get_env(:elixir_test_project, :cors_origins, []),
+      origin: Config.cors_origins(),
       methods: @default_methods,
-      headers: Application.get_env(:elixir_test_project, :cors_request_headers, @default_headers),
-      expose: Application.get_env(:elixir_test_project, :cors_expose_headers, ["authorization"]),
-      max_age: Application.get_env(:elixir_test_project, :cors_max_age, 86_400)
+      headers: Config.cors_request_headers(@default_headers),
+      expose: Config.cors_expose_headers(["authorization"]),
+      max_age: Config.cors_max_age(86_400)
     ]
 
     conn

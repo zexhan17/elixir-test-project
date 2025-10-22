@@ -5,6 +5,20 @@ defmodule ElixirTestProject.Schemas.User do
   @derive {Phoenix.Param, key: :id}
   import Ecto.Changeset
 
+  @type t :: %__MODULE__{
+          id: Ecto.UUID.t() | nil,
+          name: String.t() | nil,
+          phone: String.t() | nil,
+          phone_code: String.t() | nil,
+          password: String.t() | nil,
+          password_hash: String.t() | nil,
+          is_seller: boolean(),
+          online: boolean(),
+          last_online_at: DateTime.t() | nil,
+          inserted_at: NaiveDateTime.t() | nil,
+          updated_at: NaiveDateTime.t() | nil
+        }
+
   schema "users" do
     field :name, :string
     field :phone, :string
@@ -25,6 +39,12 @@ defmodule ElixirTestProject.Schemas.User do
     |> validate_length(:password, min: 10)
     |> unique_constraint(:phone)
     |> put_password_hash()
+  end
+
+  def status_changeset(user, attrs) do
+    user
+    |> cast(attrs, [:online, :last_online_at])
+    |> validate_required([:online])
   end
 
   defp put_password_hash(changeset) do

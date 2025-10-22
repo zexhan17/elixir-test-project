@@ -42,11 +42,12 @@ config :elixir_test_project, ElixirTestProject.Repo,
   adapter: Ecto.Adapters.SQLite3
 
 # -----------------------------------------------------------------------------
-# JWT configuration
+# JWT / token retention configuration
 # -----------------------------------------------------------------------------
-config :elixir_test_project, :jwt,
-  secret: env!("JOKEN_SIGNING_SECRET", :string),
-  expires_in_days: env!("JOKEN_EXPIRES_TIME_IN_DAYS", :integer, 2)
+config :elixir_test_project,
+  joken_expires_time_in_days: env!("JOKEN_EXPIRES_TIME_IN_DAYS", :integer, 1),
+  jti_revoked_ttl_days: env!("JTI_REVOKED_TTL_DAYS", :integer, 30),
+  jti_revoked_cleanup_interval_hours: env!("JTI_REVOKED_CLEANUP_INTERVAL_HOURS", :integer, 24)
 
 # -----------------------------------------------------------------------------
 # Google OAuth configuration

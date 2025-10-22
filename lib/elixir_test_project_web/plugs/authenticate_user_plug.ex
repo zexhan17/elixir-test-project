@@ -9,105 +9,23 @@ defmodule ElixirTestProjectWeb.Plugs.AuthenticateUserPlug do
 
   import Plug.Conn
 
-  alias ElixirTestProject.Users
-  alias ElixirTestProjectWeb.Auth.Token
+  alias ElixirTestProjectWeb.Auth
 
   def init(opts), do: opts
 
   def call(conn, _opts) do
-    conn
-    |> get_req_header("authorization")
-    |> List.first()
-    |> extract_bearer()
-    |> case do
-      {:ok, token} when is_binary(token) and token != "" ->
-        token = String.trim(token)
+    auth_header = conn |> get_req_header("authorization") |> List.first()
 
-        case verify_token(token) do
-          {:ok, claims} when is_map(claims) ->
-            # Normalize claims and check revocation via JTI
-            nclaims = Token.normalize_claims(claims)
-            jti = Map.get(nclaims, "jti")
-
-            if jti && ElixirTestProject.Users.jti_revoked?(jti) do
-              assign(conn, :current_user, nil)
-            else
-              assign(conn, :current_user, user_from_claims(nclaims))
-            end
-
-          {:error, _} ->
-            # Try explicit signer used during generation as a pragmatic fallback
-            signer =
-              try do
-                Token.signer()
-              rescue
-                _ -> nil
-              end
-
-            case signer do
-              nil ->
-                assign(conn, :current_user, nil)
-
-              signer ->
-                case Token.verify_and_validate(token, signer) do
-                  {:ok, claims} when is_map(claims) ->
-                    nclaims = Token.normalize_claims(claims)
-                    assign(conn, :current_user, user_from_claims(nclaims))
-
-                  _ ->
-                    assign(conn, :current_user, nil)
-                end
-            end
-
-          _ ->
-            assign(conn, :current_user, nil)
-        end
-
+    with {:ok, token} <- Auth.bearer_from_authorization(auth_header),
+         {:ok, user, claims} <- Auth.verify_and_fetch_user(token) do
+      conn
+      |> assign(:current_user, user)
+      |> assign(:token_claims, claims)
+    else
       _ ->
-        assign(conn, :current_user, nil)
-    end
-  end
-
-  defp extract_bearer(nil), do: {:error, :no_authorization}
-  defp extract_bearer(""), do: {:error, :no_authorization}
-  defp extract_bearer("Bearer " <> token) when is_binary(token) and token != "", do: {:ok, token}
-  defp extract_bearer(_), do: {:error, :invalid_format}
-
-  defp verify_token(token) do
-    # Try module-level verification first
-    try do
-      Token.verify_and_validate(token)
-    rescue
-      _e ->
-        # Fallback to trying potential signers (same approach as controller)
-        candidates =
-          [
-            System.get_env("JOKEN_SIGNING_SECRET"),
-            Application.get_env(:elixir_test_project, ElixirTestProjectWeb.Endpoint)[
-              :secret_key_base
-            ]
-          ]
-          |> Enum.filter(&(&1 not in [nil, ""]))
-          |> Enum.uniq()
-          |> Enum.map(&Joken.Signer.create("HS256", &1))
-
-        try_signers(token, candidates)
-    end
-  end
-
-  defp try_signers(_token, []), do: {:error, :no_signers_available}
-
-  defp try_signers(token, [signer | rest]) do
-    case Token.verify_and_validate(token, signer) do
-      {:ok, claims} -> {:ok, claims}
-      {:error, _} -> try_signers(token, rest)
-    end
-  end
-
-  defp user_from_claims(claims) when is_map(claims) do
-    case Token.user_id_from_claims(claims) do
-      nil -> nil
-      user_id -> Users.get_user(user_id)
+        conn
+        |> assign(:current_user, nil)
+        |> assign(:token_claims, nil)
     end
   end
 end

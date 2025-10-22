@@ -4,6 +4,7 @@ defmodule ElixirTestProject.Application do
   @moduledoc false
 
   use Application
+  alias ElixirTestProject.Config
 
   @impl true
   def start(_type, _args) do
@@ -12,17 +13,14 @@ defmodule ElixirTestProject.Application do
       ElixirTestProject.Repo,
       {Ecto.Migrator,
        repos: Application.fetch_env!(:elixir_test_project, :ecto_repos), skip: skip_migrations?()},
-      {DNSCluster,
-       query: Application.get_env(:elixir_test_project, :dns_cluster_query) || :ignore},
+      {DNSCluster, query: Config.dns_cluster_query()},
       {Phoenix.PubSub, name: ElixirTestProject.PubSub},
       ElixirTestProjectWeb.Presence,
       ElixirTestProject.RevokedTokenCleaner,
-      ElixirTestProject.ExpiredTokenPurger,
       # Start a worker by calling: ElixirTestProject.Worker.start_link(arg)
       # {ElixirTestProject.Worker, arg},
       # Start to serve requests, typically the last entry
-      ElixirTestProjectWeb.Endpoint,
-      {Finch, name: ElixirTestProject.Finch}
+      ElixirTestProjectWeb.Endpoint
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html

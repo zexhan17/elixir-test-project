@@ -4,9 +4,13 @@ defmodule ElixirTestProject.Google do
   (Drive & Photos upload/retrieve).
   """
 
-  alias ElixirTestProject.{Repo, Schemas.GoogleAuth}
+  alias Ecto.Changeset
+  alias ElixirTestProject.{Config, Repo}
+  alias ElixirTestProject.Schemas.GoogleAuth
+
   require Logger
 
+  @finch Req.Finch
   @token_url "https://oauth2.googleapis.com/token"
   @userinfo_url "https://www.googleapis.com/oauth2/v2/userinfo"
   @drive_upload_url "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart"
@@ -15,58 +19,59 @@ defmodule ElixirTestProject.Google do
   @photos_create_item_url "https://photoslibrary.googleapis.com/v1/mediaItems:batchCreate"
 
   # === Exchange authorization code for tokens ===
-  def exchange_code_for_tokens(code) do
-    oauth = Application.get_env(:elixir_test_project, :google_oauth, [])
+  def exchange_code_for_tokens(code) when is_binary(code) and byte_size(code) > 0 do
+    oauth = Config.google_oauth_config()
 
-    body =
-      URI.encode_query(%{
-        code: code,
-        client_id: oauth[:client_id],
-        client_secret: oauth[:client_secret],
-        redirect_uri: oauth[:callback_url],
-        grant_type: "authorization_code"
-      })
+    params = %{
+      code: code,
+      client_id: oauth.client_id,
+      client_secret: oauth.client_secret,
+      redirect_uri: oauth.callback_url,
+      grant_type: "authorization_code"
+    }
 
-    headers = [{"Content-Type", "application/x-www-form-urlencoded"}]
+    case request(method: :post, url: @token_url, form: params) do
+      {:ok, %Req.Response{status: 200, body: body}} ->
+        {:ok, body}
 
-    case Finch.build(:post, @token_url, headers, body)
-         |> Finch.request(ElixirTestProject.Finch) do
-      {:ok, %Finch.Response{status: 200, body: body}} ->
-        {:ok, Jason.decode!(body)}
+      {:ok, %Req.Response{status: status, body: body}} ->
+        log_http_error("token exchange", status, body)
+        {:error, {:http_error, status}}
 
-      {:ok, %Finch.Response{status: s, body: b}} ->
-        Logger.error("Google token exchange failed: #{inspect(b)}")
-        {:error, {:http, s, b}}
-
-      {:error, reason} ->
-        Logger.error("Network error: #{inspect(reason)}")
-        {:error, {:network, reason}}
+      {:error, exception} ->
+        Logger.error("Google token exchange network error: #{Exception.message(exception)}")
+        {:error, {:network_error, exception}}
     end
   end
+
+  def exchange_code_for_tokens(_), do: {:error, :invalid_code}
 
   # === Fetch Google user info ===
-  def fetch_user_info(access_token) do
-    headers = [{"Authorization", "Bearer #{access_token}"}]
+  def fetch_user_info(access_token) when is_binary(access_token) do
+    headers = [{"authorization", "Bearer #{access_token}"}]
 
-    case Finch.build(:get, @userinfo_url, headers)
-         |> Finch.request(ElixirTestProject.Finch) do
-      {:ok, %Finch.Response{status: 200, body: body}} ->
-        {:ok, Jason.decode!(body)}
+    case request(method: :get, url: @userinfo_url, headers: headers) do
+      {:ok, %Req.Response{status: 200, body: body}} ->
+        {:ok, body}
 
-      {:ok, %Finch.Response{status: s, body: b}} ->
-        Logger.error("User info error #{s}: #{b}")
-        {:error, {:http, s, b}}
+      {:ok, %Req.Response{status: status, body: body}} ->
+        log_http_error("user info", status, body)
+        {:error, {:http_error, status}}
 
-      {:error, reason} ->
-        Logger.error("User info network error: #{inspect(reason)}")
-        {:error, {:network, reason}}
+      {:error, exception} ->
+        Logger.error("Google user info network error: #{Exception.message(exception)}")
+        {:error, {:network_error, exception}}
     end
   end
 
+  def fetch_user_info(_), do: {:error, :invalid_token}
+
   # === Save or update tokens ===
-  def save_auth(user_id, token_data, user_info) do
+  def save_auth(user_id, token_data, user_info)
+      when is_binary(user_id) and is_map(token_data) and is_map(user_info) do
     expires_at =
-      DateTime.add(DateTime.utc_now(), token_data["expires_in"] || 3600, :second)
+      DateTime.utc_now()
+      |> DateTime.add(Map.get(token_data, "expires_in", 3600), :second)
 
     attrs = %{
       user_id: user_id,
@@ -82,75 +87,89 @@ defmodule ElixirTestProject.Google do
       token_type: token_data["token_type"]
     }
 
-    existing = Repo.get_by(GoogleAuth, user_id: user_id)
+    changeset =
+      case Repo.get_by(GoogleAuth, user_id: user_id) do
+        %GoogleAuth{} = existing -> GoogleAuth.changeset(existing, attrs)
+        nil -> GoogleAuth.changeset(%GoogleAuth{}, attrs)
+      end
 
-    if existing do
-      existing
-      |> GoogleAuth.changeset(attrs)
-      |> Repo.update()
-    else
-      %GoogleAuth{}
-      |> GoogleAuth.changeset(attrs)
-      |> Repo.insert()
-    end
+    Repo.insert_or_update(changeset)
   end
 
+  def save_auth(_, _, _), do: {:error, :invalid_attributes}
+
   # === Access token management ===
-  def get_valid_access_token(auth) do
-    if DateTime.compare(auth.expires_at, DateTime.utc_now()) == :gt do
+  def get_valid_access_token(%GoogleAuth{} = auth) do
+    if auth.expires_at && DateTime.compare(auth.expires_at, DateTime.utc_now()) == :gt do
       {:ok, auth.access_token}
     else
       refresh_access_token(auth)
     end
   end
 
-  def get_google_auth_by_id(user_id) do
+  def get_valid_access_token(_), do: {:error, :missing_auth}
+
+  def get_google_auth_by_id(user_id) when is_binary(user_id) do
     Repo.get_by(GoogleAuth, user_id: user_id)
   end
 
-  defp refresh_access_token(auth) do
-    oauth = Application.get_env(:elixir_test_project, :google_oauth, [])
+  def get_google_auth_by_id(_), do: nil
 
-    body =
-      URI.encode_query(%{
-        refresh_token: auth.refresh_token,
-        client_id: oauth[:client_id],
-        client_secret: oauth[:client_secret],
-        grant_type: "refresh_token"
-      })
+  defp refresh_access_token(%GoogleAuth{refresh_token: nil}) do
+    Logger.error("Cannot refresh Google token without a refresh_token")
+    {:error, :missing_refresh_token}
+  end
 
-    headers = [{"Content-Type", "application/x-www-form-urlencoded"}]
+  defp refresh_access_token(%GoogleAuth{} = auth) do
+    oauth = Config.google_oauth_config()
 
-    case Finch.build(:post, @token_url, headers, body)
-         |> Finch.request(ElixirTestProject.Finch) do
-      {:ok, %Finch.Response{status: 200, body: body}} ->
-        data = Jason.decode!(body)
+    params = %{
+      refresh_token: auth.refresh_token,
+      client_id: oauth.client_id,
+      client_secret: oauth.client_secret,
+      grant_type: "refresh_token"
+    }
 
+    case request(method: :post, url: @token_url, form: params) do
+      {:ok, %Req.Response{status: 200, body: body}} ->
         expires_at =
-          DateTime.add(DateTime.utc_now(), data["expires_in"], :second)
+          DateTime.utc_now()
+          |> DateTime.add(Map.get(body, "expires_in", 3600), :second)
           |> DateTime.truncate(:second)
 
-        updated_auth =
-          auth
-          |> Ecto.Changeset.change(%{
-            access_token: data["access_token"],
+        changeset =
+          Changeset.change(auth, %{
+            access_token: body["access_token"],
             expires_at: expires_at
           })
-          |> Repo.update!()
 
-        {:ok, updated_auth.access_token}
+        case Repo.update(changeset) do
+          {:ok, updated} ->
+            {:ok, updated.access_token}
 
-      error ->
-        Logger.error("Token refresh failed: #{inspect(error)}")
+          {:error, changeset} ->
+            Logger.error("Failed to persist refreshed Google token: #{inspect(changeset.errors)}")
+            {:error, :persist_failed}
+        end
+
+      {:ok, %Req.Response{status: status, body: body}} ->
+        log_http_error("refresh token", status, body)
+        {:error, :refresh_failed}
+
+      {:error, exception} ->
+        Logger.error("Token refresh failed: #{Exception.message(exception)}")
         {:error, :refresh_failed}
     end
   end
 
   # === Upload file to Google Drive ===
-  def upload_to_drive(auth, filename, mime_type, file_binary) do
+  def upload_to_drive(nil, _filename, _mime_type, _file_binary), do: {:error, :missing_auth}
+
+  def upload_to_drive(%GoogleAuth{} = auth, filename, mime_type, file_binary)
+      when is_binary(filename) and is_binary(mime_type) and is_binary(file_binary) do
     with {:ok, access_token} <- get_valid_access_token(auth) do
       metadata = %{"name" => filename}
-      boundary = "boundary123"
+      boundary = "elixir-boundary-#{System.unique_integer([:positive])}"
 
       multipart_body =
         "--#{boundary}\r\n" <>
@@ -163,83 +182,130 @@ defmodule ElixirTestProject.Google do
           "--#{boundary}--"
 
       headers = [
-        {"Authorization", "Bearer #{access_token}"},
-        {"Content-Type", "multipart/related; boundary=#{boundary}"}
+        {"authorization", "Bearer #{access_token}"},
+        {"content-type", "multipart/related; boundary=#{boundary}"}
       ]
 
-      case Finch.build(:post, @drive_upload_url, headers, multipart_body)
-           |> Finch.request(ElixirTestProject.Finch) do
-        {:ok, %Finch.Response{status: 200, body: body}} ->
-          {:ok, Jason.decode!(body)}
+      case request(method: :post, url: @drive_upload_url, headers: headers, body: multipart_body) do
+        {:ok, %Req.Response{status: 200, body: body}} ->
+          {:ok, body}
 
-        other ->
-          Logger.error("Drive upload failed: #{inspect(other)}")
+        {:ok, %Req.Response{status: status, body: body}} ->
+          log_http_error("drive upload", status, body)
+          {:error, :upload_failed}
+
+        {:error, exception} ->
+          Logger.error("Drive upload failed: #{Exception.message(exception)}")
           {:error, :upload_failed}
       end
     end
   end
 
   # === List files from Google Drive ===
-  def list_drive_files(auth) do
+  def list_drive_files(nil), do: {:error, :missing_auth}
+
+  def list_drive_files(%GoogleAuth{} = auth) do
     with {:ok, access_token} <- get_valid_access_token(auth) do
-      headers = [{"Authorization", "Bearer #{access_token}"}]
+      headers = [{"authorization", "Bearer #{access_token}"}]
 
-      case Finch.build(:get, @drive_files_url, headers)
-           |> Finch.request(ElixirTestProject.Finch) do
-        {:ok, %Finch.Response{status: 200, body: body}} ->
-          {:ok, Jason.decode!(body)}
+      case request(method: :get, url: @drive_files_url, headers: headers) do
+        {:ok, %Req.Response{status: 200, body: body}} ->
+          {:ok, body}
 
-        other ->
-          Logger.error("Drive list failed: #{inspect(other)}")
+        {:ok, %Req.Response{status: status, body: body}} ->
+          log_http_error("drive list", status, body)
+          {:error, :list_failed}
+
+        {:error, exception} ->
+          Logger.error("Drive list failed: #{Exception.message(exception)}")
           {:error, :list_failed}
       end
     end
   end
 
   # === Upload image/video to Google Photos ===
-  def upload_to_photos(auth, filename, _mime_type, file_binary) do
-    with {:ok, access_token} <- get_valid_access_token(auth) do
-      headers = [
-        {"Authorization", "Bearer #{access_token}"},
-        {"Content-Type", "application/octet-stream"},
-        {"X-Goog-Upload-File-Name", filename},
-        {"X-Goog-Upload-Protocol", "raw"}
-      ]
+  def upload_to_photos(nil, _filename, _mime_type, _file_binary), do: {:error, :missing_auth}
 
-      # Step 1: Upload raw bytes to get an upload token
-      with {:ok, %Finch.Response{status: 200, body: upload_token}} <-
-             Finch.build(:post, @photos_upload_url, headers, file_binary)
-             |> Finch.request(ElixirTestProject.Finch) do
-        # Step 2: Create media item from upload token
-        create_body = %{
-          newMediaItems: [
-            %{
-              description: "Uploaded via API",
-              simpleMediaItem: %{uploadToken: upload_token}
-            }
-          ]
-        }
-
-        headers = [
-          {"Authorization", "Bearer #{access_token}"},
-          {"Content-Type", "application/json"}
-        ]
-
-        Finch.build(:post, @photos_create_item_url, headers, Jason.encode!(create_body))
-        |> Finch.request(ElixirTestProject.Finch)
-        |> case do
-          {:ok, %Finch.Response{status: 200, body: body}} ->
-            {:ok, Jason.decode!(body)}
-
-          other ->
-            Logger.error("Photos creation failed: #{inspect(other)}")
-            {:error, :photo_upload_failed}
-        end
-      else
-        other ->
-          Logger.error("Photos upload token failed: #{inspect(other)}")
-          {:error, :upload_token_failed}
-      end
+  def upload_to_photos(%GoogleAuth{} = auth, filename, _mime_type, file_binary)
+      when is_binary(filename) and is_binary(file_binary) do
+    with {:ok, access_token} <- get_valid_access_token(auth),
+         {:ok, upload_token} <- create_photos_upload_token(access_token, filename, file_binary),
+         {:ok, response} <- finalize_photos_upload(access_token, upload_token) do
+      {:ok, response}
     end
   end
+
+  defp create_photos_upload_token(access_token, filename, file_binary) do
+    headers = [
+      {"authorization", "Bearer #{access_token}"},
+      {"content-type", "application/octet-stream"},
+      {"x-goog-upload-file-name", filename},
+      {"x-goog-upload-protocol", "raw"}
+    ]
+
+    case request(
+           method: :post,
+           url: @photos_upload_url,
+           headers: headers,
+           body: file_binary,
+           decode_json: false
+         ) do
+      {:ok, %Req.Response{status: 200, body: body}} when is_binary(body) and body != "" ->
+        {:ok, body}
+
+      {:ok, %Req.Response{status: status, body: body}} ->
+        log_http_error("photos upload token", status, body)
+        {:error, :upload_token_failed}
+
+      {:error, exception} ->
+        Logger.error("Photos upload token failed: #{Exception.message(exception)}")
+        {:error, :upload_token_failed}
+    end
+  end
+
+  defp finalize_photos_upload(access_token, upload_token) do
+    body = %{
+      newMediaItems: [
+        %{
+          description: "Uploaded via API",
+          simpleMediaItem: %{uploadToken: upload_token}
+        }
+      ]
+    }
+
+    headers = [
+      {"authorization", "Bearer #{access_token}"},
+      {"content-type", "application/json"}
+    ]
+
+    case request(method: :post, url: @photos_create_item_url, headers: headers, json: body) do
+      {:ok, %Req.Response{status: 200, body: response_body}} ->
+        {:ok, response_body}
+
+      {:ok, %Req.Response{status: status, body: response_body}} ->
+        log_http_error("photos finalize", status, response_body)
+        {:error, :photo_upload_failed}
+
+      {:error, exception} ->
+        Logger.error("Photos creation failed: #{Exception.message(exception)}")
+        {:error, :photo_upload_failed}
+    end
+  end
+
+  defp request(options) when is_list(options) do
+    options
+    |> Keyword.put_new(:finch, @finch)
+    |> Keyword.put_new(:decode_json, [])
+    |> Req.request()
+  end
+
+  defp log_http_error(action, status, body) do
+    Logger.error("""
+    Google #{action} returned #{status}: #{format_body(body)}
+    """)
+  end
+
+  defp format_body(body) when is_binary(body), do: body
+  defp format_body(body) when is_map(body), do: Jason.encode!(body)
+  defp format_body(body), do: inspect(body)
 end

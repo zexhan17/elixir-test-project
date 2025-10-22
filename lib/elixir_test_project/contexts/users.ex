@@ -9,43 +9,48 @@ defmodule ElixirTestProject.Users do
 
   import Ecto.Query, warn: false
   alias ElixirTestProject.Repo
-  alias ElixirTestProjectWeb.Presence
   alias ElixirTestProject.Schemas.User
   alias ElixirTestProject.Schemas.RevokedToken
+  alias ElixirTestProjectWeb.Presence
 
-  def register_user(attrs) do
+  @spec register_user(map()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t()}
+  def register_user(attrs) when is_map(attrs) do
     %User{}
     |> User.registration_changeset(attrs)
     |> Repo.insert()
   end
 
-  def get_user_by_phone(phone) do
+  @spec get_user_by_phone(String.t()) :: User.t() | nil
+  def get_user_by_phone(phone) when is_binary(phone) do
     Repo.get_by(User, phone: phone)
   end
+
+  def get_user_by_phone(_), do: nil
 
   @doc """
   Get a user by id. Returns nil if not found.
   """
-  def get_user(id) do
+  @spec get_user(Ecto.UUID.t() | binary()) :: User.t() | nil
+  def get_user(id) when is_binary(id) do
     Repo.get(User, id)
   end
 
-  @spec register_user(map()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t()}
-  @spec get_user(Ecto.UUID.t() | binary()) :: User.t() | nil
+  def get_user(_), do: nil
 
-  def authenticate_user(phone, password) do
-    case get_user_by_phone(phone) do
-      nil ->
-        {:error, :invalid_credentials}
-
-      user ->
-        if Pbkdf2.verify_pass(password, user.password_hash) do
-          {:ok, user}
-        else
-          {:error, :invalid_credentials}
-        end
+  @spec authenticate_user(String.t(), String.t(), String.t()) ::
+          {:ok, User.t()} | {:error, :invalid_credentials}
+  def authenticate_user(phone_code, phone, password)
+      when is_binary(phone_code) and is_binary(phone) and is_binary(password) do
+    with %User{} = user <- get_user_by_phone(phone),
+         true <- phone_codes_match?(user.phone_code, phone_code),
+         true <- Pbkdf2.verify_pass(password, user.password_hash) do
+      {:ok, user}
+    else
+      _ -> {:error, :invalid_credentials}
     end
   end
+
+  def authenticate_user(_, _, _), do: {:error, :invalid_credentials}
 
   @doc """
   Revoke a token by JTI. Stores a RevokedToken record with revoked_at set to now.
@@ -67,44 +72,34 @@ defmodule ElixirTestProject.Users do
     end
   end
 
-  # Marks a user online/offline in DB (simple boolean + timestamp pattern)
-  def mark_user_online(user_id, is_online) when is_integer(user_id) or is_binary(user_id) do
-    user_id = user_id
-    user = get_user(user_id)
+  @spec mark_user_online(Ecto.UUID.t() | binary(), boolean()) ::
+          {:ok, User.t()} | {:error, :not_found | Ecto.Changeset.t()}
+  def mark_user_online(user_id, is_online) when is_binary(user_id) or is_integer(user_id) do
+    with %User{} = user <- get_user(user_id) do
+      attrs = %{
+        online: is_online,
+        last_online_at: online_timestamp(is_online)
+      }
 
-    if user do
-      changeset =
-        User.changeset(user, %{
-          online: is_online,
-          last_online_at: if(is_online, do: nil, else: DateTime.utc_now())
-        })
-
-      Repo.update(changeset)
+      user
+      |> User.status_changeset(attrs)
+      |> Repo.update()
     else
-      {:error, :not_found}
+      nil -> {:error, :not_found}
     end
   end
 
-  # Called on terminate — will check Presence for remaining presences and mark offline only if none remain.
+  def mark_user_online(_user_id, _), do: {:error, :not_found}
+
+  @doc """
+  Called on terminate — will check Presence for remaining presences and mark offline only if none remain.
+  """
+  @spec maybe_mark_user_offline_after_disconnect(Ecto.UUID.t() | binary()) ::
+          {:ok, :still_present} | {:ok, User.t()} | {:error, term()}
   def maybe_mark_user_offline_after_disconnect(user_id) do
-    topic = "user_presence:global"
-
-    presences = Presence.list(topic)
-
-    # presences is map keyed by presence key: e.g. "user:123" => %{metas: [...]}
-    key = "user:#{user_id}"
-
-    case Map.get(presences, key) do
-      nil ->
-        # no remaining presence entries for this user -> mark offline
-        mark_user_online(user_id, false)
-
-      %{metas: metas} when is_list(metas) and length(metas) == 0 ->
-        mark_user_online(user_id, false)
-
-      _ ->
-        # still present on another socket/tab — keep online
-        {:ok, :still_present}
+    case presence_count(user_id) do
+      0 -> mark_user_online(user_id, false)
+      _ -> {:ok, :still_present}
     end
   end
 
@@ -114,5 +109,25 @@ defmodule ElixirTestProject.Users do
   def jti_revoked?(jti) when is_binary(jti) do
     query = from rt in RevokedToken, where: rt.jti == ^jti, select: rt.id
     Repo.exists?(query)
+  end
+
+  defp phone_codes_match?(stored, provided) when is_binary(stored) and is_binary(provided) do
+    String.trim_leading(to_string(stored), "+") ==
+      String.trim_leading(to_string(provided), "+")
+  end
+
+  defp phone_codes_match?(_, _), do: false
+
+  defp online_timestamp(true), do: nil
+  defp online_timestamp(false), do: DateTime.utc_now()
+
+  defp presence_count(user_id) do
+    "user_presence:global"
+    |> Presence.list()
+    |> Map.get("user:#{user_id}")
+    |> case do
+      %{metas: metas} when is_list(metas) -> length(metas)
+      _ -> 0
+    end
   end
 end

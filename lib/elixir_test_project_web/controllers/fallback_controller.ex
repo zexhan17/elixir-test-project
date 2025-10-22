@@ -4,7 +4,6 @@ defmodule ElixirTestProjectWeb.FallbackController do
   Used with `action_fallback ElixirTestProjectWeb.FallbackController`.
   """
   use ElixirTestProjectWeb, :controller
-  action_fallback ElixirTestProjectWeb.FallbackController
   require Logger
 
   # Handle validation errors (Ecto changeset)

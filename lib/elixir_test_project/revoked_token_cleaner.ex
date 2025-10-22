@@ -30,7 +30,11 @@ defmodule ElixirTestProject.RevokedTokenCleaner do
 
   @impl true
   def handle_info(:cleanup, state) do
-    prune_old_revoked_tokens()
+    case prune_old_revoked_tokens() do
+      :ok -> :ok
+      {:error, reason} -> Logger.error("RevokedTokenCleaner cleanup failed: #{inspect(reason)}")
+    end
+
     schedule_next()
     {:noreply, state}
   end
@@ -43,23 +47,27 @@ defmodule ElixirTestProject.RevokedTokenCleaner do
   @spec cleanup_interval_ms() :: non_neg_integer()
   defp cleanup_interval_ms do
     hours = ElixirTestProjectWeb.Auth.Config.cleanup_interval_hours()
-    hours * 60 * 60 * 1000
-  end
-
-  @spec ttl_days() :: pos_integer()
-  defp ttl_days do
-    ElixirTestProjectWeb.Auth.Config.revoked_ttl_days()
+    max(hours, 1) * 60 * 60 * 1000
   end
 
   defp prune_old_revoked_tokens do
-    cutoff = DateTime.utc_now() |> DateTime.add(-ttl_days() * 24 * 60 * 60, :second)
+    ttl_days = ElixirTestProjectWeb.Auth.Config.revoked_ttl_days()
+    cutoff = DateTime.utc_now() |> DateTime.add(-ttl_days * 24 * 60 * 60, :second)
 
-    {deleted, _} =
+    deleted =
       from(rt in RevokedToken, where: rt.inserted_at < ^cutoff)
       |> Repo.delete_all()
+      |> elem(0)
 
-    Logger.debug("RevokedTokenCleaner removed #{deleted} old revoked tokens")
+    Logger.info("RevokedTokenCleaner removed #{deleted} revoked token(s)")
+    :ok
   rescue
-    e -> Logger.error("RevokedTokenCleaner failed: #{inspect(e)}")
+    exception ->
+      Logger.error("""
+      RevokedTokenCleaner encountered #{Exception.message(exception)}
+      #{Exception.format(:error, exception, __STACKTRACE__)}
+      """)
+
+      {:error, exception}
   end
 end

@@ -21,8 +21,7 @@ defmodule ElixirTestProjectWeb.Auth.Token do
   # then falls back to the endpoint secret_key_base configured for the
   # current environment (dev/test/prod).
   def signer do
-    Config.jwt_signing_secret()
-    |> Joken.Signer.create("HS256")
+    Joken.Signer.create("HS256", Config.jwt_signing_secret())
   end
 
   @spec signer() :: Joken.Signer.t()

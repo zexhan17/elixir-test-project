@@ -8,6 +8,7 @@ defmodule ElixirTestProject.MixProject do
       elixir: "~> 1.15",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
+      listeners: listeners(),
       aliases: aliases(),
       deps: deps()
     ]
@@ -21,6 +22,14 @@ defmodule ElixirTestProject.MixProject do
       mod: {ElixirTestProject.Application, []},
       extra_applications: [:logger, :runtime_tools]
     ]
+  end
+
+  defp listeners do
+    if Mix.env() in [:dev, :test] do
+      [Phoenix.CodeReloader]
+    else
+      []
+    end
   end
 
   def cli do

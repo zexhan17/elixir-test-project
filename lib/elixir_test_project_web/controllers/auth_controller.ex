@@ -20,8 +20,8 @@ defmodule ElixirTestProjectWeb.AuthController do
       }) do
     attrs = %{
       "name" => name,
-      "phone" => phone,
-      "phone_code" => phone_code,
+      "phone" => normalize_phone(phone),
+      "phone_code" => normalize_phone_code(phone_code),
       "password" => password
     }
 
@@ -47,7 +47,11 @@ defmodule ElixirTestProjectWeb.AuthController do
         "phone" => phone,
         "password" => password
       }) do
-    case Users.authenticate_user(phone_code, phone, password) do
+    case Users.authenticate_user(
+           normalize_phone_code(phone_code),
+           normalize_phone(phone),
+           password
+         ) do
       {:ok, user} ->
         with {:ok, token, _claims} <- issue_token(user) do
           json(conn, %{
@@ -238,6 +242,16 @@ defmodule ElixirTestProjectWeb.AuthController do
     |> Enum.map(fn {k, v} -> {to_string(k), v} end)
     |> Map.new()
   end
+
+  defp normalize_phone(phone) when is_binary(phone), do: String.trim(phone)
+  defp normalize_phone(phone) when is_integer(phone), do: Integer.to_string(phone)
+  defp normalize_phone(phone) when is_float(phone), do: trunc(phone) |> Integer.to_string()
+  defp normalize_phone(phone), do: to_string(phone)
+
+  defp normalize_phone_code(phone_code) when is_binary(phone_code),
+    do: phone_code |> String.trim() |> String.upcase()
+
+  defp normalize_phone_code(phone_code), do: phone_code |> to_string() |> normalize_phone_code()
 
   defp translate_errors(changeset) do
     Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->

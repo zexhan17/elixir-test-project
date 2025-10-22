@@ -1,9 +1,10 @@
 defmodule ElixirTestProjectWeb.UsersController do
   use ElixirTestProjectWeb, :controller
   action_fallback ElixirTestProjectWeb.FallbackController
-  alias ElixirTestProject.{Config, Google}
+  alias ElixirTestProject.{Config, Google, Users}
 
   @google_oauth_base "https://accounts.google.com/o/oauth2/v2/auth"
+  @profile_response_fields ~w(name city state country address)a
 
   def get_google_redirect_link(conn, _params) do
     oauth_config = Config.google_oauth_config()
@@ -60,10 +61,11 @@ defmodule ElixirTestProjectWeb.UsersController do
     |> json(%{error: "Missing \"code\" parameter"})
   end
 
-  def upload_to_google(conn, %{"filename" => filename, "file" => file}) do
+  def upload_to_google(conn, %{"filename" => filename, "file" => %Plug.Upload{} = file}) do
     with %{assigns: %{current_user: user}} when not is_nil(user) <- conn,
          %{} = auth <- Google.get_google_auth_by_id(user.id),
-         {:ok, response} <- Google.upload_to_drive(auth, filename, "image/jpeg", file) do
+         mime_type <- file.content_type || "application/octet-stream",
+         {:ok, response} <- Google.upload_to_drive(auth, filename, mime_type, file) do
       json(conn, %{uploaded: true, data: response})
     else
       %{assigns: %{current_user: nil}} ->
@@ -81,6 +83,18 @@ defmodule ElixirTestProjectWeb.UsersController do
     end
   end
 
+  def upload_to_google(%{assigns: %{current_user: nil}} = conn, _params) do
+    conn
+    |> put_status(:unauthorized)
+    |> json(%{error: "Not authenticated"})
+  end
+
+  def upload_to_google(conn, _params) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: "invalid_upload_payload"})
+  end
+
   def is_google_connected(%{assigns: %{current_user: nil}} = conn, _params) do
     conn
     |> put_status(:unauthorized)
@@ -90,6 +104,22 @@ defmodule ElixirTestProjectWeb.UsersController do
   def is_google_connected(%{assigns: %{current_user: user}} = conn, _params) do
     connected = Google.get_google_auth_by_id(user.id) != nil
     json(conn, %{connected: connected})
+  end
+
+  def update_profile(%{assigns: %{current_user: nil}} = conn, _params) do
+    conn
+    |> put_status(:unauthorized)
+    |> json(%{error: "Not authenticated"})
+  end
+
+  def update_profile(%{assigns: %{current_user: user}} = conn, params) when is_map(params) do
+    with {:ok, updated_user} <- Users.update_profile(user, params) do
+      json(conn, %{
+        success: true,
+        message: "Profile updated successfully",
+        profile: profile_payload(updated_user)
+      })
+    end
   end
 
   defp respond_google_error(conn, {:http_error, status}) do
@@ -133,6 +163,11 @@ defmodule ElixirTestProjectWeb.UsersController do
     conn
     |> put_status(:bad_request)
     |> json(%{error: to_string(error)})
+  end
+
+  defp profile_payload(user) do
+    user
+    |> Map.take(@profile_response_fields)
   end
 
   defp translate_errors(changeset) do

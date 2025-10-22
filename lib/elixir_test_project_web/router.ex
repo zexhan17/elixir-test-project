@@ -32,6 +32,7 @@ defmodule ElixirTestProjectWeb.Router do
       get "/connect-google", UsersController, :connect_google
       get "/is-connected", UsersController, :is_google_connected
       post "/upload-image", UsersController, :upload_to_google
+      post "/update-profile", UsersController, :update_profile
     end
 
     # ✅ Catch-all for unmatched /api routes

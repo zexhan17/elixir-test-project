@@ -213,6 +213,43 @@ defmodule ElixirTestProject.Google do
   """
   def upload_to_drive(nil, _filename, _mime_type, _file_binary), do: {:error, :missing_auth}
 
+  def upload_to_drive(%GoogleAuth{} = auth, filename, mime_type, %Plug.Upload{} = upload) do
+    effective_mime_type =
+      cond do
+        is_binary(mime_type) and mime_type != "" -> mime_type
+        is_binary(upload.content_type) and upload.content_type != "" -> upload.content_type
+        true -> "application/octet-stream"
+      end
+
+    effective_filename =
+      case filename do
+        name when is_binary(name) and name != "" -> name
+        _ -> upload.filename || "upload"
+      end
+
+    case File.read(upload.path) do
+      {:ok, binary} when byte_size(binary) > 0 ->
+        upload_to_drive(auth, effective_filename, effective_mime_type, binary)
+
+      {:ok, _} ->
+        Logger.warning("Attempted to upload an empty file",
+          user_id: auth.user_id,
+          filename: effective_filename
+        )
+
+        {:error, :empty_file}
+
+      {:error, reason} ->
+        Logger.error("Failed to read uploaded file",
+          user_id: auth.user_id,
+          filename: effective_filename,
+          reason: inspect(reason)
+        )
+
+        {:error, :file_read_failed}
+    end
+  end
+
   def upload_to_drive(%GoogleAuth{} = auth, filename, mime_type, file_binary)
       when is_binary(filename) and is_binary(mime_type) and is_binary(file_binary) do
     with {:ok, access_token} <- get_valid_access_token(auth) do

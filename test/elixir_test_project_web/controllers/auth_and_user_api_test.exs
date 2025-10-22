@@ -59,6 +59,20 @@ defmodule ElixirTestProjectWeb.AuthAndUserApiTest do
     # Set env vars for the test
     System.put_env("GOOGLE_CLIENT_ID", "test-client-id")
     System.put_env("GOOGLE_CALLBACK_URL", "http://localhost:4000/auth/google/redirect")
+    original_config = Application.get_env(:elixir_test_project, :google_oauth)
+
+    Application.put_env(:elixir_test_project, :google_oauth, %{
+      client_id: "test-client-id",
+      client_secret: "test-client-secret",
+      callback_url: "http://localhost:4000/auth/google/redirect"
+    })
+
+    on_exit(fn ->
+      case original_config do
+        nil -> Application.delete_env(:elixir_test_project, :google_oauth)
+        config -> Application.put_env(:elixir_test_project, :google_oauth, config)
+      end
+    end)
 
     conn = get(conn, "/api/user/get-google-redirect-link")
     body = json_response(conn, 200)

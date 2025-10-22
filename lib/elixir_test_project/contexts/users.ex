@@ -14,6 +14,8 @@ defmodule ElixirTestProject.Users do
   alias ElixirTestProjectWeb.Presence
   require Logger
 
+  @profile_fields ~w(name city state country address)a
+
   @doc """
   Registers a new user with the provided attributes.
 
@@ -46,6 +48,20 @@ defmodule ElixirTestProject.Users do
   end
 
   def get_user(_), do: nil
+
+  @doc """
+  Updates user profile fields (name, city, state, country, address) with sanitized input.
+  """
+  @spec update_profile(User.t(), map()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t()}
+  def update_profile(%User{} = user, attrs) when is_map(attrs) do
+    sanitized_attrs = sanitize_profile_attrs(attrs)
+
+    user
+    |> User.profile_changeset(sanitized_attrs)
+    |> Repo.update()
+  end
+
+  def update_profile(_, _), do: {:error, :invalid_params}
 
   @doc """
   Authenticates a user by phone number and password.
@@ -198,4 +214,47 @@ defmodule ElixirTestProject.Users do
       _ -> 0
     end
   end
+
+  defp sanitize_profile_attrs(attrs) when is_map(attrs) do
+    Enum.reduce(@profile_fields, %{}, fn field, acc ->
+      case fetch_profile_field(attrs, field) do
+        :error ->
+          acc
+
+        {:ok, value} ->
+          Map.put(acc, field, normalize_profile_value(value))
+      end
+    end)
+  end
+
+  defp fetch_profile_field(attrs, field) when is_map(attrs) and is_atom(field) do
+    case Map.fetch(attrs, field) do
+      {:ok, _} = result ->
+        result
+
+      :error ->
+        attrs
+        |> Map.fetch(Atom.to_string(field))
+    end
+  end
+
+  defp fetch_profile_field(_, _), do: :error
+
+  defp normalize_profile_value(value) when is_binary(value) do
+    value
+    |> String.trim()
+    |> case do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp normalize_profile_value(value) when is_integer(value) or is_float(value) do
+    value
+    |> to_string()
+    |> normalize_profile_value()
+  end
+
+  defp normalize_profile_value(nil), do: nil
+  defp normalize_profile_value(value), do: value
 end

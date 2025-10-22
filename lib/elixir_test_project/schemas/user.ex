@@ -8,6 +8,10 @@ defmodule ElixirTestProject.Schemas.User do
   @type t :: %__MODULE__{
           id: Ecto.UUID.t() | nil,
           name: String.t() | nil,
+          city: String.t() | nil,
+          state: String.t() | nil,
+          country: String.t() | nil,
+          address: String.t() | nil,
           phone: String.t() | nil,
           phone_code: String.t() | nil,
           password: String.t() | nil,
@@ -21,6 +25,10 @@ defmodule ElixirTestProject.Schemas.User do
 
   schema "users" do
     field :name, :string
+    field :city, :string
+    field :state, :string
+    field :country, :string
+    field :address, :string
     field :phone, :string
     field :phone_code, :string
     field :password, :string, virtual: true
@@ -45,6 +53,20 @@ defmodule ElixirTestProject.Schemas.User do
     user
     |> cast(attrs, [:online, :last_online_at])
     |> validate_required([:online])
+  end
+
+  @doc """
+  Changeset used when updating editable profile fields from the frontend.
+  Only allows a whitelisted set of attributes and enforces basic length limits.
+  """
+  def profile_changeset(user, attrs) do
+    user
+    |> cast(attrs, [:name, :city, :state, :country, :address])
+    |> validate_length(:name, min: 1, max: 120)
+    |> validate_length(:city, max: 120)
+    |> validate_length(:state, max: 120)
+    |> validate_length(:country, max: 120)
+    |> validate_length(:address, max: 255)
   end
 
   defp put_password_hash(changeset) do

@@ -21,7 +21,9 @@ defmodule ElixirTestProjectWeb.PresenceChannel do
 
     meta = %{
       online_at: DateTime.utc_now() |> DateTime.to_iso8601(),
-      phx_ref: socket.ref
+      phx_ref: socket.ref,
+      name: user.name,
+      is_seller: user.is_seller
     }
 
     # track user presence: key by user id to collapse multiple tabs/devices if desired

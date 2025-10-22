@@ -18,7 +18,9 @@ defmodule ElixirTestProject.Google do
   @photos_upload_url "https://photoslibrary.googleapis.com/v1/uploads"
   @photos_create_item_url "https://photoslibrary.googleapis.com/v1/mediaItems:batchCreate"
 
-  # === Exchange authorization code for tokens ===
+  @doc """
+  Exchanges an OAuth authorization code for Google access and refresh tokens.
+  """
   def exchange_code_for_tokens(code) when is_binary(code) and byte_size(code) > 0 do
     oauth = Config.google_oauth_config()
 
@@ -46,7 +48,9 @@ defmodule ElixirTestProject.Google do
 
   def exchange_code_for_tokens(_), do: {:error, :invalid_code}
 
-  # === Fetch Google user info ===
+  @doc """
+  Fetches Google user profile details using an access token.
+  """
   def fetch_user_info(access_token) when is_binary(access_token) do
     headers = [{"authorization", "Bearer #{access_token}"}]
 
@@ -66,7 +70,9 @@ defmodule ElixirTestProject.Google do
 
   def fetch_user_info(_), do: {:error, :invalid_token}
 
-  # === Save or update tokens ===
+  @doc """
+  Persists or updates the stored Google OAuth credentials for the given user.
+  """
   def save_auth(user_id, token_data, user_info)
       when is_binary(user_id) and is_map(token_data) and is_map(user_info) do
     expires_at =
@@ -93,12 +99,42 @@ defmodule ElixirTestProject.Google do
         nil -> GoogleAuth.changeset(%GoogleAuth{}, attrs)
       end
 
-    Repo.insert_or_update(changeset)
+    changeset
+    |> Repo.insert_or_update()
+    |> log_save_auth_result(user_id, attrs[:google_user_id])
   end
 
   def save_auth(_, _, _), do: {:error, :invalid_attributes}
 
-  # === Access token management ===
+  defp log_save_auth_result({:ok, %GoogleAuth{} = auth} = result, user_id, google_user_id) do
+    Logger.info("Stored Google OAuth credentials",
+      user_id: user_id,
+      google_user_id: google_user_id,
+      auth_id: auth.id
+    )
+
+    result
+  end
+
+  defp log_save_auth_result(
+         {:error, %Ecto.Changeset{} = changeset} = result,
+         user_id,
+         google_user_id
+       ) do
+    Logger.error("Failed to persist Google OAuth credentials",
+      user_id: user_id,
+      google_user_id: google_user_id,
+      errors: inspect(changeset.errors)
+    )
+
+    result
+  end
+
+  defp log_save_auth_result(result, _user_id, _google_user_id), do: result
+
+  @doc """
+  Returns a valid Google access token, refreshing when the stored token has expired.
+  """
   def get_valid_access_token(%GoogleAuth{} = auth) do
     if auth.expires_at && DateTime.compare(auth.expires_at, DateTime.utc_now()) == :gt do
       {:ok, auth.access_token}
@@ -109,14 +145,17 @@ defmodule ElixirTestProject.Google do
 
   def get_valid_access_token(_), do: {:error, :missing_auth}
 
+  @doc """
+  Fetches the persisted Google auth record for a user id.
+  """
   def get_google_auth_by_id(user_id) when is_binary(user_id) do
     Repo.get_by(GoogleAuth, user_id: user_id)
   end
 
   def get_google_auth_by_id(_), do: nil
 
-  defp refresh_access_token(%GoogleAuth{refresh_token: nil}) do
-    Logger.error("Cannot refresh Google token without a refresh_token")
+  defp refresh_access_token(%GoogleAuth{refresh_token: nil, user_id: user_id}) do
+    Logger.error("Cannot refresh Google token without a refresh_token", user_id: user_id)
     {:error, :missing_refresh_token}
   end
 
@@ -148,21 +187,30 @@ defmodule ElixirTestProject.Google do
             {:ok, updated.access_token}
 
           {:error, changeset} ->
-            Logger.error("Failed to persist refreshed Google token: #{inspect(changeset.errors)}")
+            Logger.error("Failed to persist refreshed Google token",
+              user_id: auth.user_id,
+              errors: inspect(changeset.errors)
+            )
+
             {:error, :persist_failed}
         end
 
       {:ok, %Req.Response{status: status, body: body}} ->
-        log_http_error("refresh token", status, body)
+        log_http_error("refresh token", status, body, user_id: auth.user_id)
         {:error, :refresh_failed}
 
       {:error, exception} ->
-        Logger.error("Token refresh failed: #{Exception.message(exception)}")
+        Logger.error("Token refresh failed: #{Exception.message(exception)}",
+          user_id: auth.user_id
+        )
+
         {:error, :refresh_failed}
     end
   end
 
-  # === Upload file to Google Drive ===
+  @doc """
+  Uploads a file to Google Drive for the authenticated user.
+  """
   def upload_to_drive(nil, _filename, _mime_type, _file_binary), do: {:error, :missing_auth}
 
   def upload_to_drive(%GoogleAuth{} = auth, filename, mime_type, file_binary)
@@ -191,17 +239,23 @@ defmodule ElixirTestProject.Google do
           {:ok, body}
 
         {:ok, %Req.Response{status: status, body: body}} ->
-          log_http_error("drive upload", status, body)
+          log_http_error("drive upload", status, body, user_id: auth.user_id)
           {:error, :upload_failed}
 
         {:error, exception} ->
-          Logger.error("Drive upload failed: #{Exception.message(exception)}")
+          Logger.error("Drive upload failed: #{Exception.message(exception)}",
+            user_id: auth.user_id,
+            filename: filename
+          )
+
           {:error, :upload_failed}
       end
     end
   end
 
-  # === List files from Google Drive ===
+  @doc """
+  Lists Google Drive files accessible to the authenticated user.
+  """
   def list_drive_files(nil), do: {:error, :missing_auth}
 
   def list_drive_files(%GoogleAuth{} = auth) do
@@ -213,17 +267,22 @@ defmodule ElixirTestProject.Google do
           {:ok, body}
 
         {:ok, %Req.Response{status: status, body: body}} ->
-          log_http_error("drive list", status, body)
+          log_http_error("drive list", status, body, user_id: auth.user_id)
           {:error, :list_failed}
 
         {:error, exception} ->
-          Logger.error("Drive list failed: #{Exception.message(exception)}")
+          Logger.error("Drive list failed: #{Exception.message(exception)}",
+            user_id: auth.user_id
+          )
+
           {:error, :list_failed}
       end
     end
   end
 
-  # === Upload image/video to Google Photos ===
+  @doc """
+  Uploads media to Google Photos for the authenticated user.
+  """
   def upload_to_photos(nil, _filename, _mime_type, _file_binary), do: {:error, :missing_auth}
 
   def upload_to_photos(%GoogleAuth{} = auth, filename, _mime_type, file_binary)
@@ -232,6 +291,15 @@ defmodule ElixirTestProject.Google do
          {:ok, upload_token} <- create_photos_upload_token(access_token, filename, file_binary),
          {:ok, response} <- finalize_photos_upload(access_token, upload_token) do
       {:ok, response}
+    else
+      {:error, reason} = error ->
+        Logger.error("Google Photos upload failed",
+          user_id: auth.user_id,
+          filename: filename,
+          reason: inspect(reason)
+        )
+
+        error
     end
   end
 
@@ -299,10 +367,13 @@ defmodule ElixirTestProject.Google do
     |> Req.request()
   end
 
-  defp log_http_error(action, status, body) do
-    Logger.error("""
-    Google #{action} returned #{status}: #{format_body(body)}
-    """)
+  defp log_http_error(action, status, body, metadata \\ []) do
+    Logger.error(
+      """
+      Google #{action} returned #{status}: #{format_body(body)}
+      """,
+      metadata
+    )
   end
 
   defp format_body(body) when is_binary(body), do: body

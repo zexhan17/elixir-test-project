@@ -12,14 +12,24 @@ defmodule ElixirTestProject.Users do
   alias ElixirTestProject.Schemas.User
   alias ElixirTestProject.Schemas.RevokedToken
   alias ElixirTestProjectWeb.Presence
+  require Logger
 
+  @doc """
+  Registers a new user with the provided attributes.
+
+  Returns the inserted `User` on success or an error changeset otherwise.
+  """
   @spec register_user(map()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t()}
   def register_user(attrs) when is_map(attrs) do
     %User{}
     |> User.registration_changeset(attrs)
     |> Repo.insert()
+    |> log_registration_result()
   end
 
+  @doc """
+  Retrieves a user by phone number.
+  """
   @spec get_user_by_phone(String.t()) :: User.t() | nil
   def get_user_by_phone(phone) when is_binary(phone) do
     Repo.get_by(User, phone: phone)
@@ -37,6 +47,11 @@ defmodule ElixirTestProject.Users do
 
   def get_user(_), do: nil
 
+  @doc """
+  Authenticates a user by phone number and password.
+
+  Returns `{:ok, user}` on success or `{:error, :invalid_credentials}` when authentication fails.
+  """
   @spec authenticate_user(String.t(), String.t(), String.t()) ::
           {:ok, User.t()} | {:error, :invalid_credentials}
   def authenticate_user(phone_code, phone, password)
@@ -46,7 +61,12 @@ defmodule ElixirTestProject.Users do
          true <- Pbkdf2.verify_pass(password, user.password_hash) do
       {:ok, user}
     else
-      _ -> {:error, :invalid_credentials}
+      _ ->
+        Logger.warning("Authentication failed for provided credentials",
+          phone: masked_phone(phone)
+        )
+
+        {:error, :invalid_credentials}
     end
   end
 
@@ -66,12 +86,22 @@ defmodule ElixirTestProject.Users do
     changeset = RevokedToken.changeset(%RevokedToken{}, params)
 
     case Repo.insert(changeset, on_conflict: :nothing) do
-      {:ok, rt} -> {:ok, rt}
-      {:error, cs} -> {:error, cs}
-      other -> other
+      {:ok, rt} ->
+        Logger.info("Recorded revoked token", jti: jti, user_id: user_id)
+        {:ok, rt}
+
+      {:error, cs} ->
+        Logger.error("Failed to record revoked token", jti: jti, errors: inspect(cs.errors))
+        {:error, cs}
+
+      other ->
+        other
     end
   end
 
+  @doc """
+  Marks the given user as online or offline and updates the timestamp accordingly.
+  """
   @spec mark_user_online(Ecto.UUID.t() | binary(), boolean()) ::
           {:ok, User.t()} | {:error, :not_found | Ecto.Changeset.t()}
   def mark_user_online(user_id, is_online) when is_binary(user_id) or is_integer(user_id) do
@@ -84,8 +114,27 @@ defmodule ElixirTestProject.Users do
       user
       |> User.status_changeset(attrs)
       |> Repo.update()
+      |> case do
+        {:ok, updated} = result ->
+          Logger.info("Updated user online status",
+            user_id: updated.id,
+            online: is_online
+          )
+
+          result
+
+        {:error, changeset} = error ->
+          Logger.error("Failed to update user online status",
+            user_id: user_id,
+            errors: inspect(changeset.errors)
+          )
+
+          error
+      end
     else
-      nil -> {:error, :not_found}
+      nil ->
+        Logger.warning("Attempted to change status for missing user", user_id: user_id)
+        {:error, :not_found}
     end
   end
 
@@ -120,6 +169,25 @@ defmodule ElixirTestProject.Users do
 
   defp online_timestamp(true), do: nil
   defp online_timestamp(false), do: DateTime.utc_now()
+
+  defp log_registration_result({:ok, %User{} = user} = result) do
+    Logger.info("Registered new user", user_id: user.id)
+    result
+  end
+
+  defp log_registration_result({:error, %Ecto.Changeset{} = changeset} = result) do
+    Logger.warning("User registration failed", errors: inspect(changeset.errors))
+    result
+  end
+
+  defp log_registration_result(result), do: result
+
+  defp masked_phone(phone) when is_binary(phone) and byte_size(phone) > 4 do
+    suffix = String.slice(phone, -4, 4)
+    "****" <> suffix
+  end
+
+  defp masked_phone(phone), do: phone
 
   defp presence_count(user_id) do
     "user_presence:global"

@@ -9,7 +9,6 @@ defmodule ElixirTestProject.Config do
 
   @app :elixir_test_project
   @min_jwt_secret_length 32
-  @google_required_keys [:client_id, :client_secret, :callback_url]
 
   @doc """
   Returns the signing secret used for JWT tokens.
@@ -40,32 +39,6 @@ defmodule ElixirTestProject.Config do
     endpoint_config()
     |> Keyword.fetch!(:secret_key_base)
     |> ensure_binary!("secret_key_base")
-  end
-
-  @doc """
-  Returns the configured Google OAuth values as a map.
-  """
-  @spec google_oauth_config() :: map()
-  def google_oauth_config do
-    @app
-    |> Application.get_env(:google_oauth, [])
-    |> Map.new()
-    |> ensure_google_keys!()
-  end
-
-  @spec google_client_id() :: String.t()
-  def google_client_id do
-    google_oauth_config().client_id
-  end
-
-  @spec google_client_secret() :: String.t()
-  def google_client_secret do
-    google_oauth_config().client_secret
-  end
-
-  @spec google_callback_url() :: String.t()
-  def google_callback_url do
-    google_oauth_config().callback_url
   end
 
   @doc """
@@ -120,26 +93,6 @@ defmodule ElixirTestProject.Config do
     case System.get_env(name) do
       nil -> nil
       value -> String.trim(value)
-    end
-  end
-
-  defp ensure_google_keys!(config) do
-    missing_keys =
-      @google_required_keys
-      |> Enum.reject(fn key ->
-        value = Map.get(config, key)
-        is_binary(value) and value != ""
-      end)
-
-    case missing_keys do
-      [] ->
-        config
-
-      keys ->
-        raise """
-        Missing Google OAuth configuration keys: #{Enum.join(keys, ", ")}.
-        Ensure they are provided via runtime configuration or environment variables.
-        """
     end
   end
 

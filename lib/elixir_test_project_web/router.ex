@@ -28,10 +28,6 @@ defmodule ElixirTestProjectWeb.Router do
     end
 
     scope "/user" do
-      get "/get-google-redirect-link", UsersController, :get_google_redirect_link
-      get "/connect-google", UsersController, :connect_google
-      get "/is-connected", UsersController, :is_google_connected
-      post "/upload-image", UsersController, :upload_to_google
       post "/update-profile", UsersController, :update_profile
     end
 

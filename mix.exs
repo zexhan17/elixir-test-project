@@ -63,7 +63,19 @@ defmodule ElixirTestProject.MixProject do
       {:cors_plug, "~> 3.0"},
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
-      {:dotenvy, "~> 1.0.0"}
+      {:dotenvy, "~> 1.0.0"},
+      # Core file upload abstraction
+      {:waffle, "~> 1.1"},
+      # If you want to store file refs in Ecto
+      {:waffle_ecto, "~> 0.0.12"},
+      # AWS/MinIO client
+      {:ex_aws, "~> 2.6"},
+      # S3-specific commands
+      {:ex_aws_s3, "~> 2.5"},
+      # HTTP client
+      {:hackney, "~> 1.25"},
+      # XML parser required by ExAws
+      {:sweet_xml, "~> 0.7.5"}
     ]
   end
 

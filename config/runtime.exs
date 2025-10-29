@@ -58,6 +58,31 @@ config :elixir_test_project, :google_oauth,
   callback_url: env!("GOOGLE_CALLBACK_URL", :string!)
 
 # -----------------------------------------------------------------------------
+# Media storage (MinIO / S3 compatible) configuration
+# -----------------------------------------------------------------------------
+minio_endpoint = env!("MINIO_ENDPOINT", :string, "http://127.0.0.1:9000")
+parsed_endpoint = URI.parse(minio_endpoint)
+use_ssl? = env!("MINIO_USE_SSL", :string, "false") == "true"
+scheme = if use_ssl?, do: "https", else: "http"
+media_bucket = env!("BUCKET_NAME", :string, "elixir")
+
+config :elixir_test_project, :media_storage,
+  bucket: media_bucket,
+  endpoint: minio_endpoint
+
+config :ex_aws,
+  access_key_id: env!("MINIO_ROOT_USER", :string!),
+  secret_access_key: env!("MINIO_ROOT_PASSWORD", :string!),
+  json_codec: Jason,
+  region: env!("AWS_REGION", :string, "us-east-1")
+
+config :ex_aws, :s3,
+  scheme: scheme,
+  host: parsed_endpoint.host || "127.0.0.1",
+  port: parsed_endpoint.port || if(use_ssl?, do: 443, else: 80),
+  virtual_host: false
+
+# -----------------------------------------------------------------------------
 # CORS configuration
 # -----------------------------------------------------------------------------
 allowed_origins =

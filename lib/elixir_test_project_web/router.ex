@@ -2,7 +2,8 @@ defmodule ElixirTestProjectWeb.Router do
   use ElixirTestProjectWeb, :router
 
   pipeline :api do
-    plug :accepts, ["json"]
+    plug :accepts, ["json", "multipart"]
+    plug OpenApiSpex.Plug.PutApiSpec, module: ElixirTestProjectWeb.ApiSpec
     plug ElixirTestProjectWeb.Plugs.DynamicCorsPlug
     plug ElixirTestProjectWeb.Plugs.AuthenticateUserPlug
   end
@@ -29,6 +30,27 @@ defmodule ElixirTestProjectWeb.Router do
 
     scope "/user" do
       post "/update-profile", UsersController, :update_profile
+    end
+
+    # Public media endpoints (no auth required)
+    scope "/media" do
+      get "/stream/:id", MediaController, :stream_media
+    end
+
+    # Protected media endpoints (auth required)
+    scope "/media" do
+      pipe_through :auth
+      get "/", MediaController, :get_media
+      post "/upload", MediaController, :upload
+    end
+
+    scope "/", alias: false do
+      get "/openapi.json", OpenApiSpex.Plug.RenderSpec, []
+
+      get "/docs", OpenApiSpex.Plug.SwaggerUI,
+        otp_app: :elixir_test_project,
+        path: "/api/openapi.json",
+        display_operation_id: true
     end
 
     # ✅ Catch-all for unmatched /api routes

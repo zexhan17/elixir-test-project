@@ -85,6 +85,30 @@ defmodule ElixirTestProject.Config do
     Application.get_env(@app, :cors_max_age, default)
   end
 
+  @doc """
+  Returns the configured media storage bucket.
+  """
+  @spec media_bucket() :: String.t()
+  def media_bucket do
+    media_storage_config()
+    |> Keyword.get(:bucket)
+    |> ensure_binary!("media bucket")
+  end
+
+  @doc """
+  Returns the configured media storage endpoint (scheme://host:port).
+  """
+  @spec media_endpoint() :: String.t()
+  def media_endpoint do
+    media_storage_config()
+    |> Keyword.get(:endpoint)
+    |> ensure_binary!("media endpoint")
+  end
+
+  defp media_storage_config do
+    Application.get_env(@app, :media_storage, [])
+  end
+
   defp endpoint_config do
     Application.get_env(@app, ElixirTestProjectWeb.Endpoint, [])
   end

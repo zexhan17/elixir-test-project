@@ -17,6 +17,7 @@ defmodule ElixirTestProject.Application do
       {Phoenix.PubSub, name: ElixirTestProject.PubSub},
       ElixirTestProjectWeb.Presence,
       ElixirTestProject.RevokedTokenCleaner,
+      ElixirTestProject.Media.CleanupWorker,
       # Start a worker by calling: ElixirTestProject.Worker.start_link(arg)
       # {ElixirTestProject.Worker, arg},
       # Start to serve requests, typically the last entry

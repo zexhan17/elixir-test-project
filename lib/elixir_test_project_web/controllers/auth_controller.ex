@@ -1,13 +1,32 @@
 defmodule ElixirTestProjectWeb.AuthController do
   use ElixirTestProjectWeb, :controller
+  use OpenApiSpex.ControllerSpecs
+
+  tags(["Auth"])
 
   action_fallback ElixirTestProjectWeb.FallbackController
 
   alias ElixirTestProject.Users
   alias ElixirTestProjectWeb.Auth
   alias ElixirTestProjectWeb.Auth.Token
+  alias ElixirTestProjectWeb.ApiSchemas
 
   require Logger
+
+  operation(:register,
+    summary: "Register a user account",
+    operation_id: "AuthRegister",
+    request_body:
+      {"Registration payload", "application/json", ApiSchemas.RegisterRequest,
+       examples: %{"default" => %{"value" => ApiSchemas.RegisterRequest.schema().example}}},
+    responses: %{
+      200 => {"Registration successful", "application/json", ApiSchemas.RegisterResponse},
+      400 =>
+        {"Registration failed", "application/json", ApiSchemas.ErrorResponse,
+         description: "Returned when validation fails or the phone already exists."}
+    },
+    security: []
+  )
 
   @doc """
   POST /api/auth/register
@@ -38,6 +57,25 @@ defmodule ElixirTestProjectWeb.AuthController do
         |> json(%{errors: translate_errors(changeset)})
     end
   end
+
+  operation(:login,
+    summary: "Authenticate and receive a JWT",
+    operation_id: "AuthLogin",
+    request_body:
+      {"Login credentials", "application/json", ApiSchemas.LoginRequest,
+       examples: %{"default" => %{"value" => ApiSchemas.LoginRequest.schema().example}}},
+    responses: %{
+      200 => {"Login successful", "application/json", ApiSchemas.LoginResponse},
+      400 =>
+        {"Missing parameters", "application/json", ApiSchemas.ErrorResponse,
+         description:
+           "Returned when the payload is missing required keys. The body includes an explanatory message."},
+      401 =>
+        {"Invalid credentials", "application/json", ApiSchemas.ErrorResponse,
+         description: "Returned when the phone or password does not match a user."}
+    },
+    security: []
+  )
 
   @doc """
   POST /api/auth/login
@@ -84,6 +122,21 @@ defmodule ElixirTestProjectWeb.AuthController do
     })
   end
 
+  operation(:verify_token,
+    summary: "Validate a bearer token without refreshing it",
+    operation_id: "AuthVerifyToken",
+    responses: %{
+      200 =>
+        {"Token is valid", "application/json", ApiSchemas.VerifyTokenResponse,
+         description: "Returns the decoded claims when the token is still valid."},
+      400 =>
+        {"Authorization header missing or malformed", "application/json",
+         ApiSchemas.VerifyTokenResponse},
+      401 => {"Token invalid or revoked", "application/json", ApiSchemas.VerifyTokenResponse}
+    },
+    security: [%{"bearerAuth" => []}]
+  )
+
   @doc """
   GET /api/auth/verify-token
   """
@@ -118,6 +171,19 @@ defmodule ElixirTestProjectWeb.AuthController do
         |> json(%{valid: false, error: "invalid_authorization_format"})
     end
   end
+
+  operation(:refresh_token,
+    summary: "Refresh a valid bearer token",
+    operation_id: "AuthRefreshToken",
+    responses: %{
+      200 => {"Token refreshed", "application/json", ApiSchemas.RefreshTokenResponse},
+      400 =>
+        {"Authorization header missing or malformed", "application/json",
+         ApiSchemas.VerifyTokenResponse},
+      401 => {"Token invalid or revoked", "application/json", ApiSchemas.VerifyTokenResponse}
+    },
+    security: [%{"bearerAuth" => []}]
+  )
 
   @doc """
   GET /api/auth/refresh-token
@@ -157,6 +223,22 @@ defmodule ElixirTestProjectWeb.AuthController do
         |> json(%{valid: false, error: "invalid_authorization_format"})
     end
   end
+
+  operation(:logout,
+    summary: "Revoke the current bearer token",
+    operation_id: "AuthLogout",
+    responses: %{
+      200 => {"Logout success", "application/json", ApiSchemas.LogoutResponse},
+      400 =>
+        {"Missing token or claims", "application/json", ApiSchemas.LogoutResponse,
+         description:
+           "Returned when the Authorization header is missing or the token lacks a JTI."},
+      401 =>
+        {"Token invalid", "application/json", ApiSchemas.LogoutResponse,
+         description: "Returned when the bearer token fails verification."}
+    },
+    security: [%{"bearerAuth" => []}]
+  )
 
   @doc """
   POST /api/auth/logout

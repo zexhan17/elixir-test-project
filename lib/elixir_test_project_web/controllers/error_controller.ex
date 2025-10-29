@@ -1,5 +1,21 @@
 defmodule ElixirTestProjectWeb.ErrorController do
   use ElixirTestProjectWeb, :controller
+  use OpenApiSpex.ControllerSpecs
+
+  tags(["Errors"])
+
+  alias ElixirTestProjectWeb.ApiSchemas
+
+  operation(:not_found,
+    summary: "Catch-all for unknown API routes",
+    operation_id: "ErrorCatchAll",
+    responses: %{
+      404 =>
+        {"Route not found", "application/json", ApiSchemas.ErrorResponse,
+         description: "Returned when no matching API route exists."}
+    },
+    security: []
+  )
 
   @doc """
   Handles unmatched API routes with JSON response.

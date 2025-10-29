@@ -64,6 +64,7 @@ defmodule ElixirTestProject.MixProject do
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
       {:dotenvy, "~> 1.0.0"},
+      {:open_api_spex, "~> 3.18"},
       # Core file upload abstraction
       {:waffle, "~> 1.1"},
       # If you want to store file refs in Ecto

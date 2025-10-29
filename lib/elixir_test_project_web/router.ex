@@ -3,6 +3,12 @@ defmodule ElixirTestProjectWeb.Router do
 
   pipeline :api do
     plug :accepts, ["json", "multipart"]
+
+    plug Plug.Parsers,
+      parsers: [:urlencoded, :multipart, :json],
+      pass: ["*/*"],
+      json_decoder: Phoenix.json_library()
+
     plug OpenApiSpex.Plug.PutApiSpec, module: ElixirTestProjectWeb.ApiSpec
     plug ElixirTestProjectWeb.Plugs.DynamicCorsPlug
     plug ElixirTestProjectWeb.Plugs.AuthenticateUserPlug

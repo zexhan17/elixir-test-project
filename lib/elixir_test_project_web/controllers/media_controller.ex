@@ -40,6 +40,8 @@ defmodule ElixirTestProjectWeb.MediaController do
   Upload one or multiple images to the configured MinIO bucket.
   """
   def upload(%{assigns: %{current_user: user}} = conn, params) do
+    IO.inspect(params, label: "[MediaController] Incoming params")
+
     files =
       case params do
         %{"files" => files} when is_list(files) ->

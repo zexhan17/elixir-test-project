@@ -5,7 +5,6 @@ defmodule ElixirTestProjectWeb.MediaController do
   tags(["Media"])
 
   alias ElixirTestProject.Media
-  alias ElixirTestProject.Schemas.MediaAsset
   alias ElixirTestProjectWeb.ApiSchemas
 
   operation(:upload,
@@ -60,7 +59,18 @@ defmodule ElixirTestProjectWeb.MediaController do
         |> put_status(:created)
         |> json(%{
           success: true,
-          media: Enum.map(assets, &asset_payload/1)
+          media:
+            Enum.map(assets, fn asset ->
+              %{
+                id: asset.id,
+                filename: asset.filename,
+                content_type: asset.content_type,
+                byte_size: asset.byte_size,
+                used: asset.used,
+                url: Media.backend_url(asset),
+                inserted_at: asset.inserted_at
+              }
+            end)
         })
 
       {:error, :no_files_provided} ->
@@ -145,57 +155,4 @@ defmodule ElixirTestProjectWeb.MediaController do
          description: "Returned when the storage service fails to stream the file."}
     }
   )
-
-  @doc """
-  Returns metadata for a single media asset by its URL.
-  """
-  def get_media(conn, %{"url" => url}) when is_binary(url) do
-    case Media.extract_id_from_url(url) do
-      [id] ->
-        case Media.get_media_asset(id) do
-          %MediaAsset{} = asset ->
-            json(conn, %{
-              success: true,
-              media: asset_payload(asset)
-            })
-
-          nil ->
-            conn
-            |> put_status(:not_found)
-            |> json(%{
-              success: false,
-              error: "Media asset not found"
-            })
-        end
-
-      [] ->
-        conn
-        |> put_status(:bad_request)
-        |> json(%{
-          success: false,
-          error: "Invalid media URL format"
-        })
-    end
-  end
-
-  def get_media(conn, _) do
-    conn
-    |> put_status(:bad_request)
-    |> json(%{
-      success: false,
-      error: "Missing or invalid URL parameter"
-    })
-  end
-
-  defp asset_payload(asset) do
-    %{
-      id: asset.id,
-      filename: asset.filename,
-      content_type: asset.content_type,
-      byte_size: asset.byte_size,
-      used: asset.used,
-      url: Media.backend_url(asset),
-      inserted_at: asset.inserted_at
-    }
-  end
 end

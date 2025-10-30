@@ -9,7 +9,6 @@ defmodule ElixirTestProject.Schemas.User do
           id: Ecto.UUID.t() | nil,
           name: String.t() | nil,
           city: String.t() | nil,
-          state: String.t() | nil,
           country: String.t() | nil,
           address: String.t() | nil,
           phone: String.t() | nil,
@@ -19,6 +18,9 @@ defmodule ElixirTestProject.Schemas.User do
           is_seller: boolean(),
           online: boolean(),
           last_online_at: DateTime.t() | nil,
+          avatar: String.t() | nil,
+          coordinates: list(float()) | nil,
+          location: map() | nil,
           inserted_at: NaiveDateTime.t() | nil,
           updated_at: NaiveDateTime.t() | nil
         }
@@ -26,7 +28,6 @@ defmodule ElixirTestProject.Schemas.User do
   schema "users" do
     field :name, :string
     field :city, :string
-    field :state, :string
     field :country, :string
     field :address, :string
     field :phone, :string
@@ -36,6 +37,9 @@ defmodule ElixirTestProject.Schemas.User do
     field :is_seller, :boolean, default: false
     field :online, :boolean, default: false
     field :last_online_at, :utc_datetime
+    field :avatar, :string
+    field :coordinates, {:array, :float}, default: []
+    field :location, :map, default: %{}
 
     timestamps()
   end
@@ -50,9 +54,15 @@ defmodule ElixirTestProject.Schemas.User do
   end
 
   def status_changeset(user, attrs) do
+    # Ensure last_online_at is always set when online = true
+    attrs =
+      if attrs[:online] || attrs["online"],
+        do: Map.put(attrs, :last_online_at, DateTime.utc_now()),
+        else: attrs
+
     user
     |> cast(attrs, [:online, :last_online_at])
-    |> validate_required([:online])
+    |> validate_required([:online, :last_online_at])
   end
 
   @doc """
@@ -61,12 +71,27 @@ defmodule ElixirTestProject.Schemas.User do
   """
   def profile_changeset(user, attrs) do
     user
-    |> cast(attrs, [:name, :city, :state, :country, :address])
+    |> cast(attrs, [:name, :city, :country, :coordinates, :location, :avatar])
     |> validate_length(:name, min: 1, max: 120)
     |> validate_length(:city, max: 120)
-    |> validate_length(:state, max: 120)
     |> validate_length(:country, max: 120)
-    |> validate_length(:address, max: 255)
+    |> validate_length(:avatar, max: 1000)
+    |> validate_coordinates()
+  end
+
+  defp validate_coordinates(changeset) do
+    case get_change(changeset, :coordinates) do
+      nil ->
+        changeset
+
+      coords when is_list(coords) and length(coords) == 2 ->
+        if Enum.all?(coords, &is_float/1),
+          do: changeset,
+          else: add_error(changeset, :coordinates, "must be an array of 2 floats")
+
+      _ ->
+        add_error(changeset, :coordinates, "must be an array of 2 floats")
+    end
   end
 
   defp put_password_hash(changeset) do

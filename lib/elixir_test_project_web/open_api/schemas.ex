@@ -16,6 +16,18 @@ defmodule ElixirTestProjectWeb.ApiSchemas do
       properties: %{
         id: %Schema{type: :string, format: :uuid, example: "8de2c621-b7bb-4aeb-8c16-5d9e8d363c2d"},
         name: %Schema{type: :string, example: "Ada Lovelace"},
+        avatar: %Schema{type: :string, nullable: true, example: "https://example.com/avatar.jpg"},
+        coordinates: %Schema{
+          type: :array,
+          items: %Schema{type: :number},
+          example: [51.5074, -0.1278]
+        },
+        location: %Schema{
+          type: :object,
+          additionalProperties: true,
+          nullable: true,
+          example: %{"type" => "Point", "coordinates" => [51.5074, -0.1278]}
+        },
         city: %Schema{type: :string, nullable: true, example: "London"},
         state: %Schema{type: :string, nullable: true, example: "Greater London"},
         country: %Schema{type: :string, nullable: true, example: "UK"},
@@ -193,9 +205,20 @@ defmodule ElixirTestProjectWeb.ApiSchemas do
     properties = %{
       name: %Schema{type: :string, maxLength: 120},
       city: %Schema{type: :string, maxLength: 120},
-      state: %Schema{type: :string, maxLength: 120},
       country: %Schema{type: :string, maxLength: 120},
-      address: %Schema{type: :string, maxLength: 255}
+      avatar: %Schema{type: :string, maxLength: 1000},
+      coordinates: %Schema{
+        type: :array,
+        items: %Schema{type: :number},
+        minItems: 2,
+        maxItems: 2,
+        description: "Array of [latitude, longitude]"
+      },
+      location: %Schema{
+        type: :object,
+        additionalProperties: true,
+        description: "GeoJSON object or other location metadata"
+      }
     }
 
     OpenApiSpex.schema(%Schema{

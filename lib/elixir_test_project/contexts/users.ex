@@ -14,7 +14,7 @@ defmodule ElixirTestProject.Users do
   alias ElixirTestProjectWeb.Presence
   require Logger
 
-  @profile_fields ~w(name city state country address)a
+  @profile_fields ~w(name city country coordinates location avatar)a
 
   @doc """
   Registers a new user with the provided attributes.

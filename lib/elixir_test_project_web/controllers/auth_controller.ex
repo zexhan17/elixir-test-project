@@ -143,9 +143,13 @@ defmodule ElixirTestProjectWeb.AuthController do
   def verify_token(conn, _params) do
     case bearer_token(conn) do
       {:ok, token} ->
-        case Auth.verify_not_revoked(token) do
-          {:ok, claims} ->
-            json(conn, %{valid: true, claims: claims})
+        case Auth.verify_and_fetch_user(token) do
+          {:ok, user, claims} ->
+            json(conn, %{
+              valid: true,
+              claims: claims,
+              user: present_user(user)
+            })
 
           {:error, :revoked} ->
             conn
@@ -192,11 +196,12 @@ defmodule ElixirTestProjectWeb.AuthController do
     case bearer_token(conn) do
       {:ok, token} ->
         with {:ok, user, _claims} <- Auth.verify_and_fetch_user(token),
-             {:ok, refreshed_token, _new_claims} <- issue_token(user) do
+             {:ok, fresh_user} <- Auth.UserFetcher.refresh_user(user),
+             {:ok, refreshed_token, _new_claims} <- issue_token(fresh_user) do
           json(conn, %{
             message: "Token refreshed",
             token: refreshed_token,
-            user: present_user(user)
+            user: present_user(fresh_user)
           })
         else
           {:error, :revoked} ->

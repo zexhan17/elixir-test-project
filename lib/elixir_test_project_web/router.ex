@@ -51,6 +51,31 @@ defmodule ElixirTestProjectWeb.Router do
       post "/upload", MediaController, :upload
     end
 
+    scope "/gigs" do
+      get "/categories", GigCategoryController, :index
+      get "/types", GigTypeController, :index
+      get "/", GigController, :index
+      get "/:id", GigController, :show
+    end
+
+    scope "/gigs" do
+      pipe_through :auth
+
+      post "/categories", GigCategoryController, :create
+      patch "/categories/:id", GigCategoryController, :update
+      delete "/categories/:id", GigCategoryController, :delete
+
+      post "/types", GigTypeController, :create
+      patch "/types/:id", GigTypeController, :update
+      delete "/types/:id", GigTypeController, :delete
+
+      post "/", GigController, :create
+      patch "/:id", GigController, :update
+      delete "/:id", GigController, :delete
+      post "/:id/activate", GigController, :activate
+      post "/:id/deactivate", GigController, :deactivate
+    end
+
     scope "/", alias: false do
       get "/openapi.json", OpenApiSpex.Plug.RenderSpec, []
 

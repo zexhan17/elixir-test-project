@@ -313,10 +313,13 @@ defmodule ElixirTestProject.Media do
   defp normalize_header_key(_), do: nil
 
   defp build_object_key(%{filename: filename}) do
-    extension = filename |> Path.extname() |> String.downcase()
+    extension =
+      filename
+      |> Path.extname()
+      |> String.downcase()
+
     uuid = Ecto.UUID.generate()
-    date_prefix = Date.utc_today() |> Date.to_iso8601()
-    "uploads/#{date_prefix}/#{uuid}#{extension}"
+    "#{uuid}#{extension}"
   end
 
   defp delete_remote_asset(bucket, object_key) do

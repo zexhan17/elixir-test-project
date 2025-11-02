@@ -63,7 +63,7 @@ config :elixir_test_project, :google_oauth,
 minio_endpoint = env!("MINIO_ENDPOINT", :string, "http://127.0.0.1:9000")
 parsed_endpoint = URI.parse(minio_endpoint)
 use_ssl? = env!("MINIO_USE_SSL", :string, "false") == "true"
-scheme = if use_ssl?, do: "https", else: "http"
+scheme = if use_ssl?, do: "https://", else: "http://"
 media_bucket = env!("BUCKET_NAME", :string, "elixir")
 
 config :elixir_test_project, :media_storage,

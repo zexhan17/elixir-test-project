@@ -359,6 +359,25 @@ defmodule ElixirTestProjectWeb.ApiSchemas do
     })
   end
 
+  defmodule MediaSignedUrlResponse do
+    @moduledoc false
+    OpenApiSpex.schema(%Schema{
+      title: "MediaSignedUrlResponse",
+      type: :object,
+      required: [:success, :url, :expires_in],
+      properties: %{
+        success: %Schema{type: :boolean, example: true},
+        url: %Schema{
+          type: :string,
+          format: :uri,
+          example:
+            "http://127.0.0.1:9000/elixir/uploads/2024-02-20/b04826cf-b841-49ff-9bce-e2cef80d63b2.png?X-Amz-Algorithm=AWS4-HMAC-SHA256..."
+        },
+        expires_in: %Schema{type: :integer, example: 120}
+      }
+    })
+  end
+
   defmodule HealthResponse do
     @moduledoc false
     OpenApiSpex.schema(%Schema{

@@ -47,6 +47,7 @@ defmodule ElixirTestProjectWeb.Router do
     scope "/media" do
       pipe_through :auth
       get "/", MediaController, :get_media
+      get "/signed-url/:id", MediaController, :signed_url
       post "/upload", MediaController, :upload
     end
 

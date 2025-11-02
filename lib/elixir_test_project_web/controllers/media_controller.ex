@@ -106,6 +106,85 @@ defmodule ElixirTestProjectWeb.MediaController do
     |> json(%{success: false, error: "Unauthorized"})
   end
 
+  operation(:signed_url,
+    operation_id: "MediaSignedUrl",
+    summary: "Retrieve a temporary signed URL for a media asset",
+    description:
+      "Returns a short-lived signed URL that allows clients to download the media asset directly from storage.",
+    parameters: [
+      id: [
+        in: :path,
+        description: "The ID of the media asset to sign",
+        type: :string,
+        required: true,
+        example: "b04826cf-b841-49ff-9bce-e2cef80d63b2"
+      ]
+    ],
+    responses: %{
+      200 => {"Signed URL generated", "application/json", ApiSchemas.MediaSignedUrlResponse},
+      400 =>
+        {"Invalid request", "application/json", ApiSchemas.ErrorResponse,
+         description: "Returned when the provided ID is invalid."},
+      404 =>
+        {"Not found", "application/json", ApiSchemas.ErrorResponse,
+         description: "Returned when the media asset does not exist."},
+      422 =>
+        {"Unprocessable entity", "application/json", ApiSchemas.ErrorResponse,
+         description: "Returned when the media asset is missing the required object key."},
+      502 =>
+        {"Storage error", "application/json", ApiSchemas.ErrorResponse,
+         description: "Returned when the storage service fails to generate a signed URL."}
+    },
+    security: [%{"bearerAuth" => []}]
+  )
+
+  @doc """
+  Returns a signed URL for downloading the media asset. The URL is valid for two minutes.
+  """
+  def signed_url(conn, %{"id" => id}) do
+    case Media.presigned_media_url(id, expires_in: 120) do
+      {:ok, %{url: url, expires_in: expires_in}} ->
+        conn
+        |> put_status(:ok)
+        |> json(%{success: true, url: url, expires_in: expires_in})
+
+      {:error, :not_found} ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{success: false, error: "Media not found"})
+
+      {:error, :invalid_id} ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{success: false, error: "Invalid media ID"})
+
+      {:error, :invalid_expiration} ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{success: false, error: "Invalid expiration interval"})
+
+      {:error, :missing_object_key} ->
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{success: false, error: "Media asset is missing an object key"})
+
+      {:error, reason} ->
+        conn
+        |> put_status(:bad_gateway)
+        |> json(%{
+          success: false,
+          error: "Failed to generate signed URL",
+          reason: inspect(reason)
+        })
+    end
+  end
+
+  def signed_url(conn, _params) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{success: false, error: "Invalid request"})
+  end
+
   @doc """
   Streams the media asset directly from MinIO/S3 to the client.
   """

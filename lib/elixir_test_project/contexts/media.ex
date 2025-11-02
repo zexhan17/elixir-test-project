@@ -89,6 +89,46 @@ defmodule ElixirTestProject.Media do
   end
 
   @doc """
+  Generates a presigned URL that allows downloading the media asset for a limited time.
+  """
+  @spec presigned_media_url(Ecto.UUID.t(), keyword()) ::
+          {:ok, %{url: String.t(), expires_in: pos_integer()}} | {:error, term()}
+  def presigned_media_url(id, opts \\ [])
+
+  def presigned_media_url(id, opts) when is_binary(id) do
+    expires_in = Keyword.get(opts, :expires_in, 120)
+
+    if is_integer(expires_in) and expires_in > 0 do
+      case get_media_asset(id) do
+        nil ->
+          {:error, :not_found}
+
+        asset ->
+          bucket = asset.storage_bucket || Config.media_bucket()
+          object_key = asset.object_key || Map.get(asset, :key)
+
+          if is_binary(object_key) and object_key != "" do
+            config = ExAws.Config.new(:s3)
+
+            case S3.presigned_url(config, :get, bucket, object_key, expires_in: expires_in) do
+              {:ok, url} ->
+                {:ok, %{url: url, expires_in: expires_in}}
+
+              {:error, reason} ->
+                {:error, reason}
+            end
+          else
+            {:error, :missing_object_key}
+          end
+      end
+    else
+      {:error, :invalid_expiration}
+    end
+  end
+
+  def presigned_media_url(_id, _opts), do: {:error, :invalid_id}
+
+  @doc """
   Extracts a media asset ID from a backend streaming URL.
 
   Returns a list containing the ID if found, or an empty list if the URL

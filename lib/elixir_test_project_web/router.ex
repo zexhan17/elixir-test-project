@@ -40,14 +40,13 @@ defmodule ElixirTestProjectWeb.Router do
 
     # Public media endpoints (no auth required)
     scope "/media" do
-      get "/stream/:id", MediaController, :stream_media
+      # get "/stream/:id", MediaController, :stream_media
+      get "/signed-url/:id", MediaController, :signed_url
     end
 
     # Protected media endpoints (auth required)
     scope "/media" do
       pipe_through :auth
-      get "/", MediaController, :get_media
-      get "/signed-url/:id", MediaController, :signed_url
       post "/upload", MediaController, :upload
     end
 

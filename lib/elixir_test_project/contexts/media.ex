@@ -20,41 +20,39 @@ defmodule ElixirTestProject.Media do
   of the uploads fail. When an error occurs, already uploaded objects will be
   left in place but logged for manual cleanup.
   """
-  @spec upload_images([Plug.Upload.t()], keyword()) ::
+  @spec upload_images([Plug.Upload.t()] | term(), keyword()) ::
           {:ok, [MediaAsset.t()]} | {:error, term()}
   def upload_images(uploads, opts \\ [])
 
-  def upload_images(uploads, opts) when is_list(uploads) do
-    if Enum.empty?(uploads) do
-      {:error, :no_files_provided}
-    else
-      bucket = Config.media_bucket()
-      uploaded_by = Keyword.get(opts, :uploaded_by)
+  def upload_images(uploads, _opts) when not is_list(uploads), do: {:error, :invalid_payload}
 
-      uploads
-      |> Enum.reduce_while({:ok, []}, fn upload, {:ok, acc} ->
-        with {:ok, normalized} <- normalize_upload(upload),
-             {:ok, object_key} <- put_object(bucket, normalized),
-             {:ok, asset} <- persist_asset(bucket, object_key, normalized, uploaded_by) do
-          {:cont, {:ok, [asset | acc]}}
-        else
-          {:error, reason} = error ->
-            Logger.error("Failed to upload media asset", reason: inspect(reason))
-            {:halt, error}
-        end
-      end)
-      |> case do
-        {:ok, assets} -> {:ok, Enum.reverse(assets)}
-        other -> other
+  def upload_images([], _opts), do: {:error, :no_files_provided}
+
+  def upload_images(uploads, opts) when is_list(uploads) do
+    bucket = Config.media_bucket()
+    uploaded_by = Keyword.get(opts, :uploaded_by)
+
+    uploads
+    |> Enum.reduce_while({:ok, []}, fn upload, {:ok, acc} ->
+      with {:ok, normalized} <- normalize_upload(upload),
+           {:ok, object_key} <- put_object(bucket, normalized),
+           {:ok, asset} <- persist_asset(bucket, object_key, normalized, uploaded_by) do
+        {:cont, {:ok, [asset | acc]}}
+      else
+        {:error, reason} = error ->
+          Logger.error("Failed to upload media asset", reason: inspect(reason))
+          {:halt, error}
       end
+    end)
+    |> case do
+      {:ok, assets} -> {:ok, Enum.reverse(assets)}
+      other -> other
     end
   rescue
     error ->
       Logger.error("Unexpected error during media upload", error: inspect(error))
       {:error, :upload_failed}
   end
-
-  def upload_images(_other, _opts), do: {:error, :invalid_payload}
 
   @doc """
   Retrieves a single media asset by ID, returning `nil` when not found.
@@ -230,12 +228,7 @@ defmodule ElixirTestProject.Media do
 
   defp detect_content_type(_upload, filename, _provided), do: detect_from_filename(filename)
 
-  defp detect_from_filename(filename) do
-    case MIME.from_path(filename) do
-      value when is_binary(value) -> value
-      _ -> "application/octet-stream"
-    end
-  end
+  defp detect_from_filename(filename), do: MIME.from_path(filename)
 
   defp image_content_type?(content_type) do
     is_binary(content_type) and String.starts_with?(content_type, "image/")

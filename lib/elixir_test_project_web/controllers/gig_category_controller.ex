@@ -60,7 +60,7 @@ defmodule ElixirTestProjectWeb.GigCategoryController do
       Operation.parameter(
         :id,
         :path,
-        %Schema{type: :string, format: :uuid},
+        %Schema{type: :string, format: "uuid"},
         "Category ID",
         required: true
       )
@@ -98,7 +98,7 @@ defmodule ElixirTestProjectWeb.GigCategoryController do
       Operation.parameter(
         :id,
         :path,
-        %Schema{type: :string, format: :uuid},
+        %Schema{type: :string, format: "uuid"},
         "Category ID",
         required: true
       )

@@ -434,7 +434,7 @@ defmodule ElixirTestProject.Gigs do
   end
 
   defp extract_seller(attrs) do
-    seller = fetch_map(attrs, [:seller])
+    {seller, _present?} = fetch_map(attrs, [:seller])
 
     %{}
     |> maybe_put_default(:seller_name, fetch_value(attrs, [:seller_name]))
@@ -447,7 +447,7 @@ defmodule ElixirTestProject.Gigs do
   end
 
   defp extract_availability(attrs) do
-    availability = fetch_map(attrs, [:availability])
+    {availability, _present?} = fetch_map(attrs, [:availability])
 
     %{}
     |> maybe_put_default(:availability_days, fetch_value(attrs, [:availability_days]))
@@ -457,7 +457,7 @@ defmodule ElixirTestProject.Gigs do
   end
 
   defp extract_order_limits(attrs) do
-    limits = fetch_map(attrs, [:order_limits])
+    {limits, _present?} = fetch_map(attrs, [:order_limits])
 
     %{}
     |> maybe_put_default(:order_min, fetch_value(attrs, [:order_min]))
@@ -467,8 +467,8 @@ defmodule ElixirTestProject.Gigs do
   end
 
   defp extract_delivery(attrs) do
-    delivery = fetch_map(attrs, [:delivery])
-    charges = fetch_map(delivery, [:charges])
+    {delivery, _present?} = fetch_map(attrs, [:delivery])
+    {charges, _charges_present?} = fetch_map(delivery, [:charges])
 
     %{}
     |> maybe_put_default(:delivery_available, fetch_boolean(attrs, [:delivery_available]))
@@ -515,7 +515,7 @@ defmodule ElixirTestProject.Gigs do
   end
 
   defp extract_subscription(attrs) do
-    subscription = fetch_map(attrs, [:subscription])
+    {subscription, _present?} = fetch_map(attrs, [:subscription])
 
     %{}
     |> maybe_put_default(:subscription_available, fetch_boolean(attrs, [:subscription_available]))

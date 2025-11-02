@@ -14,7 +14,11 @@ defmodule ElixirTestProjectWeb.ApiSchemas do
       type: :object,
       required: [:id, :name, :phone, :phone_code, :is_seller, :online, :inserted_at],
       properties: %{
-        id: %Schema{type: :string, format: :uuid, example: "8de2c621-b7bb-4aeb-8c16-5d9e8d363c2d"},
+        id: %Schema{
+          type: :string,
+          format: "uuid",
+          example: "8de2c621-b7bb-4aeb-8c16-5d9e8d363c2d"
+        },
         name: %Schema{type: :string, example: "Ada Lovelace"},
         avatar: %Schema{type: :string, nullable: true, example: "https://example.com/avatar.jpg"},
         coordinates: %Schema{
@@ -42,12 +46,12 @@ defmodule ElixirTestProjectWeb.ApiSchemas do
         online: %Schema{type: :boolean, example: true},
         last_online_at: %Schema{
           type: :string,
-          format: :"date-time",
+          format: "date-time",
           nullable: true,
           example: "2024-02-20T18:41:13Z"
         },
-        inserted_at: %Schema{type: :string, format: :"date-time", example: "2024-02-20T17:41:13Z"},
-        updated_at: %Schema{type: :string, format: :"date-time", example: "2024-02-20T17:56:13Z"}
+        inserted_at: %Schema{type: :string, format: "date-time", example: "2024-02-20T17:41:13Z"},
+        updated_at: %Schema{type: :string, format: "date-time", example: "2024-02-20T17:56:13Z"}
       }
     })
   end
@@ -271,7 +275,7 @@ defmodule ElixirTestProjectWeb.ApiSchemas do
       properties: %{
         files: %Schema{
           type: :array,
-          items: %Schema{type: :string, format: :binary},
+          items: %Schema{type: :string, format: "binary"},
           description: "PNG, JPEG or WEBP images to upload.",
           example: ["(binary image data)"]
         }
@@ -295,7 +299,11 @@ defmodule ElixirTestProjectWeb.ApiSchemas do
         :inserted_at
       ],
       properties: %{
-        id: %Schema{type: :string, format: :uuid, example: "b04826cf-b841-49ff-9bce-e2cef80d63b2"},
+        id: %Schema{
+          type: :string,
+          format: "uuid",
+          example: "b04826cf-b841-49ff-9bce-e2cef80d63b2"
+        },
         filename: %Schema{type: :string, example: "banner.png"},
         content_type: %Schema{type: :string, example: "image/png"},
         byte_size: %Schema{type: :integer, example: 204_950},
@@ -303,7 +311,7 @@ defmodule ElixirTestProjectWeb.ApiSchemas do
         used_at: %Schema{type: :string, format: :"date-time", nullable: true, example: nil},
         url: %Schema{
           type: :string,
-          format: :uri,
+          format: "uri",
           example: "https://api.example.com/api/media/stream/b04826cf-b841-49ff-9bce-e2cef80d63b2"
         },
         inserted_at: %Schema{type: :string, format: :"date-time", example: "2024-02-20T17:41:13Z"}
@@ -333,7 +341,7 @@ defmodule ElixirTestProjectWeb.ApiSchemas do
       properties: %{
         ids: %Schema{
           type: :array,
-          items: %Schema{type: :string, format: :uuid},
+          items: %Schema{type: :string, format: "uuid"},
           minItems: 1,
           example: ["b04826cf-b841-49ff-9bce-e2cef80d63b2"]
         }
@@ -352,7 +360,7 @@ defmodule ElixirTestProjectWeb.ApiSchemas do
         media: %Schema{type: :array, items: MediaAsset.schema()},
         missing_ids: %Schema{
           type: :array,
-          items: %Schema{type: :string, format: :uuid},
+          items: %Schema{type: :string, format: "uuid"},
           example: []
         }
       }
@@ -369,7 +377,7 @@ defmodule ElixirTestProjectWeb.ApiSchemas do
         success: %Schema{type: :boolean, example: true},
         url: %Schema{
           type: :string,
-          format: :uri,
+          format: "uri",
           example:
             "http://127.0.0.1:9000/elixir/b04826cf-b841-49ff-9bce-e2cef80d63b2.png?X-Amz-Algorithm=AWS4-HMAC-SHA256..."
         },
@@ -385,7 +393,11 @@ defmodule ElixirTestProjectWeb.ApiSchemas do
       type: :object,
       required: [:id, :key, :label],
       properties: %{
-        id: %Schema{type: :string, format: :uuid, example: "5c2a8172-1ab2-4fdd-a595-6fbbf54f6ee1"},
+        id: %Schema{
+          type: :string,
+          format: "uuid",
+          example: "5c2a8172-1ab2-4fdd-a595-6fbbf54f6ee1"
+        },
         key: %Schema{type: :string, example: "milk"},
         label: %Schema{type: :string, example: "Milk"},
         description: %Schema{
@@ -461,7 +473,11 @@ defmodule ElixirTestProjectWeb.ApiSchemas do
       type: :object,
       required: [:id, :key, :label, :category_id],
       properties: %{
-        id: %Schema{type: :string, format: :uuid, example: "96aebcc4-61e6-4b37-a6da-8802e5910d0d"},
+        id: %Schema{
+          type: :string,
+          format: "uuid",
+          example: "96aebcc4-61e6-4b37-a6da-8802e5910d0d"
+        },
         key: %Schema{type: :string, example: "buffalo"},
         label: %Schema{type: :string, example: "Buffalo"},
         description: %Schema{
@@ -471,7 +487,7 @@ defmodule ElixirTestProjectWeb.ApiSchemas do
         },
         category_id: %Schema{
           type: :string,
-          format: :uuid,
+          format: "uuid",
           example: "5c2a8172-1ab2-4fdd-a595-6fbbf54f6ee1"
         },
         inserted_at: %Schema{
@@ -507,7 +523,7 @@ defmodule ElixirTestProjectWeb.ApiSchemas do
         description: %Schema{type: :string, nullable: true, example: "Cow milk options"},
         category_id: %Schema{
           type: :string,
-          format: :uuid,
+          format: "uuid",
           nullable: true,
           description: "UUID of the category this type belongs to."
         },
@@ -674,7 +690,7 @@ defmodule ElixirTestProjectWeb.ApiSchemas do
         :is_active
       ],
       properties: %{
-        id: %Schema{type: :string, format: :uuid},
+        id: %Schema{type: :string, format: "uuid"},
         title: %Schema{type: :string, example: "Fresh Cow Milk — Daily Home Delivery"},
         description: %Schema{
           type: :string,
@@ -753,7 +769,7 @@ defmodule ElixirTestProjectWeb.ApiSchemas do
         description: %Schema{type: :string, nullable: true},
         category_id: %Schema{
           type: :string,
-          format: :uuid,
+          format: "uuid",
           nullable: true,
           description: "Either provide category_id or category_key."
         },
@@ -764,7 +780,7 @@ defmodule ElixirTestProjectWeb.ApiSchemas do
         },
         type_id: %Schema{
           type: :string,
-          format: :uuid,
+          format: "uuid",
           nullable: true,
           description: "Either provide type_id or type_key."
         },
@@ -865,19 +881,19 @@ defmodule ElixirTestProjectWeb.ApiSchemas do
     @doc """
     Returns reusable OpenAPI parameter specs for gig filtering endpoints.
     """
-    @spec parameters() :: [Operation.parameter()]
+    @spec parameters() :: [OpenApiSpex.Parameter.t()]
     def parameters do
       [
         Operation.parameter(
           :category_id,
           :query,
-          %Schema{type: :string, format: :uuid},
+          %Schema{type: :string, format: "uuid"},
           "Filter by category ID."
         ),
         Operation.parameter(
           :type_id,
           :query,
-          %Schema{type: :string, format: :uuid},
+          %Schema{type: :string, format: "uuid"},
           "Filter by type ID."
         ),
         Operation.parameter(

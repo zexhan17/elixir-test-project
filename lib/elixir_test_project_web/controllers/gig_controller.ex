@@ -1,4 +1,5 @@
 defmodule ElixirTestProjectWeb.GigController do
+  @dialyzer {:nowarn_function, create: 2}
   use ElixirTestProjectWeb, :api_controller
   use OpenApiSpex.ControllerSpecs
 
@@ -13,7 +14,6 @@ defmodule ElixirTestProjectWeb.GigController do
     summary: "List gigs",
     description:
       "Returns gigs filtered by query parameters such as category, type, seller, delivery options or active status.",
-    parameters: ApiSchemas.GigFilterParams.parameters(),
     responses: %{
       200 => {"Gig list", "application/json", ApiSchemas.GigListResponse}
     }
@@ -50,8 +50,14 @@ defmodule ElixirTestProjectWeb.GigController do
   )
 
   def show(conn, %{"id" => id}) do
-    with {:ok, gig} <- fetch_gig(id) do
-      json(conn, %{success: true, gig: gig_json(gig)})
+    case fetch_gig(id) do
+      {:ok, gig} ->
+        json(conn, %{success: true, gig: gig_json(gig)})
+
+      {:error, :not_found} ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{success: false, error: "Gig not found"})
     end
   end
 
@@ -74,10 +80,50 @@ defmodule ElixirTestProjectWeb.GigController do
   )
 
   def create(conn, params) do
-    with {:ok, gig} <- Gigs.create_gig(params) do
-      conn
-      |> put_status(:created)
-      |> json(%{success: true, gig: gig_json(gig)})
+    case Gigs.create_gig(params) do
+      {:ok, gig} ->
+        conn
+        |> put_status(:created)
+        |> json(%{success: true, gig: gig_json(gig)})
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{
+          success: false,
+          error: "Validation failed",
+          details:
+            Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
+              Enum.reduce(opts, msg, fn {k, v}, acc ->
+                String.replace(acc, "%{#{k}}", to_string(v))
+              end)
+            end)
+        })
+
+      {:error, :category_not_found} ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{success: false, error: "Category not found"})
+
+      {:error, :type_not_found} ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{success: false, error: "Type not found"})
+
+      {:error, :type_not_in_category} ->
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{success: false, error: "Type does not belong to category"})
+
+      {:error, :category_required} ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{success: false, error: "Category is required"})
+
+      {:error, :type_required} ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{success: false, error: "Type is required"})
     end
   end
 
@@ -111,9 +157,56 @@ defmodule ElixirTestProjectWeb.GigController do
   def update(conn, %{"id" => id} = params) do
     params = Map.delete(params, "id")
 
-    with {:ok, gig} <- fetch_gig(id),
-         {:ok, gig} <- Gigs.update_gig(gig, params) do
-      json(conn, %{success: true, gig: gig_json(gig)})
+    case fetch_gig(id) do
+      {:ok, gig} ->
+        case Gigs.update_gig(gig, params) do
+          {:ok, gig} ->
+            json(conn, %{success: true, gig: gig_json(gig)})
+
+          {:error, %Ecto.Changeset{} = changeset} ->
+            conn
+            |> put_status(:unprocessable_entity)
+            |> json(%{
+              success: false,
+              error: "Validation failed",
+              details:
+                Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
+                  Enum.reduce(opts, msg, fn {k, v}, acc ->
+                    String.replace(acc, "%{#{k}}", to_string(v))
+                  end)
+                end)
+            })
+
+          {:error, :category_not_found} ->
+            conn
+            |> put_status(:not_found)
+            |> json(%{success: false, error: "Category not found"})
+
+          {:error, :type_not_found} ->
+            conn
+            |> put_status(:not_found)
+            |> json(%{success: false, error: "Type not found"})
+
+          {:error, :type_not_in_category} ->
+            conn
+            |> put_status(:unprocessable_entity)
+            |> json(%{success: false, error: "Type does not belong to category"})
+
+          {:error, :category_required} ->
+            conn
+            |> put_status(:bad_request)
+            |> json(%{success: false, error: "Category is required"})
+
+          {:error, :type_required} ->
+            conn
+            |> put_status(:bad_request)
+            |> json(%{success: false, error: "Type is required"})
+        end
+
+      {:error, :not_found} ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{success: false, error: "Gig not found"})
     end
   end
 
@@ -139,9 +232,31 @@ defmodule ElixirTestProjectWeb.GigController do
   )
 
   def delete(conn, %{"id" => id}) do
-    with {:ok, gig} <- fetch_gig(id),
-         {:ok, _gig} <- Gigs.delete_gig(gig) do
-      send_resp(conn, :no_content, "")
+    case fetch_gig(id) do
+      {:ok, gig} ->
+        case Gigs.delete_gig(gig) do
+          {:ok, _} ->
+            send_resp(conn, :no_content, "")
+
+          {:error, %Ecto.Changeset{} = changeset} ->
+            conn
+            |> put_status(:unprocessable_entity)
+            |> json(%{
+              success: false,
+              error: "Deletion failed",
+              details:
+                Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
+                  Enum.reduce(opts, msg, fn {k, v}, acc ->
+                    String.replace(acc, "%{#{k}}", to_string(v))
+                  end)
+                end)
+            })
+        end
+
+      {:error, :not_found} ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{success: false, error: "Gig not found"})
     end
   end
 
@@ -168,9 +283,31 @@ defmodule ElixirTestProjectWeb.GigController do
   )
 
   def activate(conn, %{"id" => id}) do
-    with {:ok, gig} <- fetch_gig(id),
-         {:ok, gig} <- Gigs.activate_gig(gig) do
-      json(conn, %{success: true, gig: gig_json(gig)})
+    case fetch_gig(id) do
+      {:ok, gig} ->
+        case Gigs.activate_gig(gig) do
+          {:ok, gig} ->
+            json(conn, %{success: true, gig: gig_json(gig)})
+
+          {:error, %Ecto.Changeset{} = changeset} ->
+            conn
+            |> put_status(:unprocessable_entity)
+            |> json(%{
+              success: false,
+              error: "Validation failed",
+              details:
+                Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
+                  Enum.reduce(opts, msg, fn {k, v}, acc ->
+                    String.replace(acc, "%{#{k}}", to_string(v))
+                  end)
+                end)
+            })
+        end
+
+      {:error, :not_found} ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{success: false, error: "Gig not found"})
     end
   end
 
@@ -182,7 +319,7 @@ defmodule ElixirTestProjectWeb.GigController do
       Operation.parameter(
         :id,
         :path,
-        %Schema{type: :string, format: :uuid},
+        %Schema{type: :string, format: "uuid"},
         "Gig ID",
         required: true
       )
@@ -197,9 +334,31 @@ defmodule ElixirTestProjectWeb.GigController do
   )
 
   def deactivate(conn, %{"id" => id}) do
-    with {:ok, gig} <- fetch_gig(id),
-         {:ok, gig} <- Gigs.deactivate_gig(gig) do
-      json(conn, %{success: true, gig: gig_json(gig)})
+    case fetch_gig(id) do
+      {:ok, gig} ->
+        case Gigs.deactivate_gig(gig) do
+          {:ok, gig} ->
+            json(conn, %{success: true, gig: gig_json(gig)})
+
+          {:error, %Ecto.Changeset{} = changeset} ->
+            conn
+            |> put_status(:unprocessable_entity)
+            |> json(%{
+              success: false,
+              error: "Validation failed",
+              details:
+                Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
+                  Enum.reduce(opts, msg, fn {k, v}, acc ->
+                    String.replace(acc, "%{#{k}}", to_string(v))
+                  end)
+                end)
+            })
+        end
+
+      {:error, :not_found} ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{success: false, error: "Gig not found"})
     end
   end
 

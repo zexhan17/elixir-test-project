@@ -225,7 +225,7 @@ defmodule ElixirTestProjectWeb.MediaController do
     responses: %{
       200 =>
         {"Media file stream", "application/octet-stream",
-         %OpenApiSpex.Schema{type: :string, format: :binary}},
+         %OpenApiSpex.Schema{type: :string, format: "binary"}},
       404 =>
         {"Not found", "application/json", ApiSchemas.ErrorResponse,
          description: "Returned when the media asset does not exist."},

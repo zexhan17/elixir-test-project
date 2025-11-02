@@ -16,7 +16,7 @@ defmodule ElixirTestProjectWeb.GigTypeController do
       Operation.parameter(
         :category_id,
         :query,
-        %Schema{type: :string, format: :uuid},
+        %Schema{type: :string, format: "uuid"},
         "Restrict results to this category ID",
         required: false
       )
@@ -76,7 +76,7 @@ defmodule ElixirTestProjectWeb.GigTypeController do
       Operation.parameter(
         :id,
         :path,
-        %Schema{type: :string, format: :uuid},
+        %Schema{type: :string, format: "uuid"},
         "Gig type ID",
         required: true
       )
@@ -112,7 +112,7 @@ defmodule ElixirTestProjectWeb.GigTypeController do
       Operation.parameter(
         :id,
         :path,
-        %Schema{type: :string, format: :uuid},
+        %Schema{type: :string, format: "uuid"},
         "Gig type ID",
         required: true
       )
